@@ -1,0 +1,2540 @@
+   1               		.file	"main.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   7               		.text
+   8               	.Ltext0:
+   9               		.cfi_sections	.debug_frame
+  11               	send.constprop.1:
+  12               	.LFB32:
+  13               		.file 1 "pixy.h"
+   1:pixy.h        **** #define PIXY_ARRAYSIZE				100
+   2:pixy.h        **** #define PIXY_START_WORD				0xaa55
+   3:pixy.h        **** #define PIXY_START_WORD_CC			0xaa56
+   4:pixy.h        **** #define PIXY_START_WORDX			0x55aa
+   5:pixy.h        **** #define PIXY_SERVO_SYNC				0xff
+   6:pixy.h        **** #define PIXY_CAM_BRIGHTNESS_SYNC	0xfe
+   7:pixy.h        **** #define PIXY_LED_SYNC				0xfd
+   8:pixy.h        **** #define PIXY_OUTBUF_SIZE			64
+   9:pixy.h        **** #define PIXY_MAX_SIGNATURE          7
+  10:pixy.h        **** 
+  11:pixy.h        **** //Camera Coordinates
+  12:pixy.h        **** #define PIXY_CAM_MAX_X 319L
+  13:pixy.h        **** #define PIXY_CAM_MIN_X 0L
+  14:pixy.h        **** #define PIXY_CAM_MAX_Y 199L
+  15:pixy.h        **** #define PIXY_CAM_MIN_Y 0L
+  16:pixy.h        **** #define PIXY_CAM_CENTER_X   ((PIXY_CAM_MAX_X - PIXY_CAM_MIN_X)/2)
+  17:pixy.h        **** #define PIXY_CAM_CENTER_Y   ((PIXY_CAM_MAX_Y - PIXY_CAM_MIN_Y)/2)
+  18:pixy.h        **** 
+  19:pixy.h        **** //Servo Coordinates
+  20:pixy.h        **** #define PIXY_SERVO_MIN_POS            0L
+  21:pixy.h        **** #define PIXY_SERVO_MAX_POS            1000L
+  22:pixy.h        **** #define PIXY_SERVO_CENTER_POS         ((PIXY_RCS_MAX_POS-PIXY_RCS_MIN_POS)/2)
+  23:pixy.h        **** 
+  24:pixy.h        **** #define PIXY_SYNC_BYTE			0x5a
+  25:pixy.h        **** #define PIXY_SYNC_BYTE_DATA		0x5b
+  26:pixy.h        **** 
+  27:pixy.h        **** // Are you using an SPI interface?  if so, uncomment this line
+  28:pixy.h        **** #define SPI 
+  29:pixy.h        **** 
+  30:pixy.h        **** #include <stdio.h>
+  31:pixy.h        **** #include <stdlib.h>
+  32:pixy.h        **** #include <avr/io.h>
+  33:pixy.h        **** 
+  34:pixy.h        **** void init(void);
+  35:pixy.h        **** void pixyInit(void);
+  36:pixy.h        **** int getStart(void);
+  37:pixy.h        **** uint16_t getBlocks(uint16_t maxBlocks);
+  38:pixy.h        **** int setServos(uint16_t s0, uint16_t s1);
+  39:pixy.h        **** int setBrightness(uint8_t brightness);
+  40:pixy.h        **** int setLED(uint8_t r, uint8_t g, uint8_t b);
+  41:pixy.h        **** 
+  42:pixy.h        **** typedef enum{
+  43:pixy.h        **** 	NORMAL_BLOCK, // Normal Block
+  44:pixy.h        **** 	CC_BLOCK //Color Code Block
+  45:pixy.h        **** } BlockType;
+  46:pixy.h        **** 
+  47:pixy.h        **** typedef struct{
+  48:pixy.h        **** 	uint16_t signature;
+  49:pixy.h        **** 	uint16_t x;
+  50:pixy.h        **** 	uint16_t y;
+  51:pixy.h        **** 	uint16_t width;
+  52:pixy.h        **** 	uint16_t height;
+  53:pixy.h        **** 	uint16_t angle; //Color blocks only
+  54:pixy.h        **** } Block;
+  55:pixy.h        **** 
+  56:pixy.h        **** 
+  57:pixy.h        **** void print(Block block)
+  58:pixy.h        ****   {
+  59:pixy.h        ****     int i, j;
+  60:pixy.h        ****     char buf[128], sig[6], d;
+  61:pixy.h        ****     uint8_t flag;  
+  62:pixy.h        ****     
+  63:pixy.h        ****     if (block.signature>PIXY_MAX_SIGNATURE) // color code! (CC)
+  64:pixy.h        ****     {
+  65:pixy.h        ****       // convert signature number to an octal string
+  66:pixy.h        ****       for (i=12, j=0, flag=0; i>=0; i-=3)
+  67:pixy.h        ****       {
+  68:pixy.h        ****         d = (block.signature>>i)&0x07;
+  69:pixy.h        ****         if (d>0 && !flag)
+  70:pixy.h        ****           flag = 1;
+  71:pixy.h        ****         if (flag)
+  72:pixy.h        ****           sig[j++] = d + '0';
+  73:pixy.h        ****       }
+  74:pixy.h        ****       sig[j] = '\0';  
+  75:pixy.h        ****       sprintf(buf, "CC block! sig: %s (%d decimal) x: %d y: %d width: %d height: %d angle %d\n", si
+  76:pixy.h        ****     }     
+  77:pixy.h        ****   else // regular block.  Note, angle is always zero, so no need to print
+  78:pixy.h        ****       sprintf(buf, "sig: %d x: %d y: %d width: %d height: %d\n", block.signature, block.x, block.y,
+  79:pixy.h        ****     serialPrint(buf); 
+  80:pixy.h        ****   }
+  81:pixy.h        **** 
+  82:pixy.h        **** //Communication
+  83:pixy.h        **** static uint16_t getWord(void);
+  84:pixy.h        **** static int send(uint8_t *data, int len);
+  85:pixy.h        **** 
+  86:pixy.h        **** //SPI & Pixy join
+  87:pixy.h        **** 
+  88:pixy.h        **** void pixyInit(void){
+  89:pixy.h        **** 	init();
+  90:pixy.h        **** }
+  91:pixy.h        **** 
+  92:pixy.h        **** #ifndef SPI //////////// for I2C and UART
+  93:pixy.h        **** 
+  94:pixy.h        **** int sendByte(uint8_t byte);
+  95:pixy.h        **** 
+  96:pixy.h        **** uint8_t getByte(){
+  97:pixy.h        ****   return UDR0;
+  98:pixy.h        **** }
+  99:pixy.h        **** 
+ 100:pixy.h        **** int sendByte(uint8_t byte){
+ 101:pixy.h        ****   usartTransmit(byte);
+ 102:pixy.h        ****   return 1;
+ 103:pixy.h        **** }
+ 104:pixy.h        **** 
+ 105:pixy.h        **** uint16_t getWord(void)
+ 106:pixy.h        **** {
+ 107:pixy.h        ****   // this routine assumes little endian 
+ 108:pixy.h        ****   uint16_t w; 
+ 109:pixy.h        ****   uint8_t c;
+ 110:pixy.h        ****   c = getByte();
+ 111:pixy.h        ****   w = getByte();
+ 112:pixy.h        ****   w <<= 8;
+ 113:pixy.h        ****   w |= c; 
+ 114:pixy.h        ****   return w;
+ 115:pixy.h        **** }
+ 116:pixy.h        **** 
+ 117:pixy.h        **** int send(uint8_t *data, int len)
+ 118:pixy.h        **** {
+ 119:pixy.h        ****   int i;
+ 120:pixy.h        ****   for (i=0; i<len; i++)
+ 121:pixy.h        ****     sendByte(data[i]);
+ 122:pixy.h        **** 
+ 123:pixy.h        ****   return len;
+ 124:pixy.h        **** }
+ 125:pixy.h        **** 
+ 126:pixy.h        **** #else ///////////// SPI routines
+ 127:pixy.h        **** 
+ 128:pixy.h        **** // SPI sends as it receives so we need a getByte routine that 
+ 129:pixy.h        **** // takes an output data argument
+ 130:pixy.h        **** 
+ 131:pixy.h        **** uint8_t getByte(uint8_t out){
+ 132:pixy.h        ****   return spiTransfer(out);
+ 133:pixy.h        **** }
+ 134:pixy.h        **** 
+ 135:pixy.h        **** // variables for a little circular queue
+ 136:pixy.h        **** static uint8_t g_outBuf[PIXY_OUTBUF_SIZE];
+ 137:pixy.h        **** static uint8_t g_outLen = 0;
+ 138:pixy.h        **** static uint8_t g_outWriteIndex = 0;
+ 139:pixy.h        **** static uint8_t g_outReadIndex = 0;
+ 140:pixy.h        **** 
+ 141:pixy.h        **** uint16_t getWord()
+ 142:pixy.h        **** {
+ 143:pixy.h        ****   // ordering is big endian because Pixy is sending 16 bits through SPI 
+ 144:pixy.h        ****   uint16_t w;
+ 145:pixy.h        ****   uint8_t c, cout = 0;
+ 146:pixy.h        **** 
+ 147:pixy.h        ****   if (g_outLen)
+ 148:pixy.h        ****   {
+ 149:pixy.h        ****     w = getByte(PIXY_SYNC_BYTE_DATA);
+ 150:pixy.h        ****     cout = g_outBuf[g_outReadIndex++];
+ 151:pixy.h        ****     g_outLen--;
+ 152:pixy.h        ****     if (g_outReadIndex==PIXY_OUTBUF_SIZE)
+ 153:pixy.h        ****       g_outReadIndex = 0; 
+ 154:pixy.h        ****   }
+ 155:pixy.h        ****   else
+ 156:pixy.h        ****     w = getByte(PIXY_SYNC_BYTE); // send out sync byte
+ 157:pixy.h        ****   w <<= 8;
+ 158:pixy.h        ****   c = getByte(cout); // send out data byte
+ 159:pixy.h        ****   w |= c;
+ 160:pixy.h        **** 
+ 161:pixy.h        ****   return w;
+ 162:pixy.h        **** }
+ 163:pixy.h        **** 
+ 164:pixy.h        **** int send(uint8_t *data, int len)
+  14               		.loc 1 164 0
+  15               		.cfi_startproc
+  16               	.LVL0:
+  17               	/* prologue: function */
+  18               	/* frame size = 0 */
+  19               	/* stack size = 0 */
+  20               	.L__stack_usage = 0
+ 165:pixy.h        **** {
+ 166:pixy.h        ****   int i;
+ 167:pixy.h        **** 
+ 168:pixy.h        ****   // check to see if we have enough space in our circular queue
+ 169:pixy.h        ****   if (g_outLen+len>PIXY_OUTBUF_SIZE)
+  21               		.loc 1 169 0
+  22 0000 2091 0000 		lds r18,g_outLen
+  23 0004 AB01      		movw r20,r22
+  24 0006 420F      		add r20,r18
+  25 0008 511D      		adc r21,__zero_reg__
+  26 000a 4134      		cpi r20,65
+  27 000c 5105      		cpc r21,__zero_reg__
+  28 000e 04F4      		brge .L5
+ 170:pixy.h        ****     return -1;
+ 171:pixy.h        **** 
+ 172:pixy.h        ****   g_outLen += len;
+  29               		.loc 1 172 0
+  30 0010 260F      		add r18,r22
+  31 0012 2093 0000 		sts g_outLen,r18
+  32               	.LVL1:
+  33 0016 E091 0000 		lds r30,g_outWriteIndex
+  34 001a DC01      		movw r26,r24
+  35 001c 9C01      		movw r18,r24
+  36 001e 260F      		add r18,r22
+  37 0020 371F      		adc r19,r23
+  38               	.LVL2:
+  39               	.L4:
+  40               	.LBB13:
+  41               	.LBB14:
+ 173:pixy.h        ****   for (i=0; i<len; i++)
+ 174:pixy.h        ****   {
+ 175:pixy.h        ****     g_outBuf[g_outWriteIndex++] = data[i];
+  42               		.loc 1 175 0
+  43 0022 81E0      		ldi r24,lo8(1)
+  44 0024 8E0F      		add r24,r30
+  45 0026 9D91      		ld r25,X+
+  46               	.LVL3:
+  47 0028 F0E0      		ldi r31,0
+  48 002a E050      		subi r30,lo8(-(g_outBuf))
+  49 002c F040      		sbci r31,hi8(-(g_outBuf))
+  50 002e 9083      		st Z,r25
+ 176:pixy.h        ****     if (g_outWriteIndex==PIXY_OUTBUF_SIZE)
+ 177:pixy.h        ****       g_outWriteIndex = 0;
+  51               		.loc 1 177 0
+  52 0030 E0E0      		ldi r30,0
+ 176:pixy.h        ****     if (g_outWriteIndex==PIXY_OUTBUF_SIZE)
+  53               		.loc 1 176 0
+  54 0032 8034      		cpi r24,lo8(64)
+  55 0034 01F0      		breq .L3
+  56 0036 E82F      		mov r30,r24
+  57               	.L3:
+  58               	.LVL4:
+ 173:pixy.h        ****   for (i=0; i<len; i++)
+  59               		.loc 1 173 0
+  60 0038 A217      		cp r26,r18
+  61 003a B307      		cpc r27,r19
+  62 003c 01F4      		brne .L4
+  63 003e E093 0000 		sts g_outWriteIndex,r30
+  64               	.LVL5:
+  65               	.L2:
+  66               	.LBE14:
+  67               	.LBE13:
+ 178:pixy.h        ****   }
+ 179:pixy.h        **** 
+ 180:pixy.h        ****   return len;
+ 181:pixy.h        **** }
+  68               		.loc 1 181 0
+  69 0042 CB01      		movw r24,r22
+  70               	/* epilogue start */
+  71 0044 0895      		ret
+  72               	.LVL6:
+  73               	.L5:
+ 170:pixy.h        **** 
+  74               		.loc 1 170 0
+  75 0046 6FEF      		ldi r22,lo8(-1)
+  76 0048 7FEF      		ldi r23,lo8(-1)
+  77               	.LVL7:
+  78 004a 00C0      		rjmp .L2
+  79               		.cfi_endproc
+  80               	.LFE32:
+  82               	.global	usartInit
+  84               	usartInit:
+  85               	.LFB6:
+  86               		.file 2 "usart.h"
+   1:usart.h       **** #define BAUD 19200 // define baud
+   2:usart.h       **** #define BAUDRATE ((F_CPU)/(BAUD*16UL)-1) // set baudrate value for UBRR
+   3:usart.h       **** #define F_CPU 16000000UL // set the CPU clock
+   4:usart.h       **** 
+   5:usart.h       **** #include <avr/io.h>
+   6:usart.h       **** #include <string.h>
+   7:usart.h       **** 
+   8:usart.h       **** void usartInit(void);
+   9:usart.h       **** void usartTransmit(uint8_t data);
+  10:usart.h       **** void serialPrintln(char* data);
+  11:usart.h       **** void serialPrint(char* data);
+  12:usart.h       **** 
+  13:usart.h       **** void usartInit (void){
+  87               		.loc 2 13 0
+  88               		.cfi_startproc
+  89               	/* prologue: function */
+  90               	/* frame size = 0 */
+  91               	/* stack size = 0 */
+  92               	.L__stack_usage = 0
+  14:usart.h       ****     UBRR0H = (BAUDRATE >> 8);
+  93               		.loc 2 14 0
+  94 004c 1092 C500 		sts 197,__zero_reg__
+  15:usart.h       ****     UBRR0L = BAUDRATE;   //set baud rate
+  95               		.loc 2 15 0
+  96 0050 83E3      		ldi r24,lo8(51)
+  97 0052 8093 C400 		sts 196,r24
+  16:usart.h       ****     UCSR0B |= (1 << TXEN0) | (1 << RXEN0); //enable receiver and transmitter
+  98               		.loc 2 16 0
+  99 0056 E1EC      		ldi r30,lo8(-63)
+ 100 0058 F0E0      		ldi r31,0
+ 101 005a 8081      		ld r24,Z
+ 102 005c 8861      		ori r24,lo8(24)
+ 103 005e 8083      		st Z,r24
+  17:usart.h       ****     UCSR0C |= (1 << UCSZ00) | (1 << UCSZ01);// 8bit data format
+ 104               		.loc 2 17 0
+ 105 0060 E2EC      		ldi r30,lo8(-62)
+ 106 0062 F0E0      		ldi r31,0
+ 107 0064 8081      		ld r24,Z
+ 108 0066 8660      		ori r24,lo8(6)
+ 109 0068 8083      		st Z,r24
+ 110               	/* epilogue start */
+  18:usart.h       **** }
+ 111               		.loc 2 18 0
+ 112 006a 0895      		ret
+ 113               		.cfi_endproc
+ 114               	.LFE6:
+ 116               	.global	usartTransmit
+ 118               	usartTransmit:
+ 119               	.LFB7:
+  19:usart.h       **** 
+  20:usart.h       **** void usartTransmit(uint8_t data){
+ 120               		.loc 2 20 0
+ 121               		.cfi_startproc
+ 122               	/* prologue: function */
+ 123               	/* frame size = 0 */
+ 124               	/* stack size = 0 */
+ 125               	.L__stack_usage = 0
+ 126               	.LVL8:
+ 127               	.L10:
+  21:usart.h       ****     while (!( UCSR0A & (1<<UDRE0))); // wait while register is free
+ 128               		.loc 2 21 0 discriminator 1
+ 129 006c 9091 C000 		lds r25,192
+ 130 0070 95FF      		sbrs r25,5
+ 131 0072 00C0      		rjmp .L10
+  22:usart.h       ****     UDR0 = data; // load data in the register
+ 132               		.loc 2 22 0
+ 133 0074 8093 C600 		sts 198,r24
+ 134               	/* epilogue start */
+  23:usart.h       **** }
+ 135               		.loc 2 23 0
+ 136 0078 0895      		ret
+ 137               		.cfi_endproc
+ 138               	.LFE7:
+ 140               	.global	serialPrintln
+ 142               	serialPrintln:
+ 143               	.LFB8:
+  24:usart.h       **** 
+  25:usart.h       **** void serialPrintln(char* data){
+ 144               		.loc 2 25 0
+ 145               		.cfi_startproc
+ 146               	.LVL9:
+ 147 007a CF92      		push r12
+ 148               	.LCFI0:
+ 149               		.cfi_def_cfa_offset 3
+ 150               		.cfi_offset 12, -2
+ 151 007c DF92      		push r13
+ 152               	.LCFI1:
+ 153               		.cfi_def_cfa_offset 4
+ 154               		.cfi_offset 13, -3
+ 155 007e EF92      		push r14
+ 156               	.LCFI2:
+ 157               		.cfi_def_cfa_offset 5
+ 158               		.cfi_offset 14, -4
+ 159 0080 FF92      		push r15
+ 160               	.LCFI3:
+ 161               		.cfi_def_cfa_offset 6
+ 162               		.cfi_offset 15, -5
+ 163 0082 0F93      		push r16
+ 164               	.LCFI4:
+ 165               		.cfi_def_cfa_offset 7
+ 166               		.cfi_offset 16, -6
+ 167 0084 1F93      		push r17
+ 168               	.LCFI5:
+ 169               		.cfi_def_cfa_offset 8
+ 170               		.cfi_offset 17, -7
+ 171 0086 CF93      		push r28
+ 172               	.LCFI6:
+ 173               		.cfi_def_cfa_offset 9
+ 174               		.cfi_offset 28, -8
+ 175 0088 DF93      		push r29
+ 176               	.LCFI7:
+ 177               		.cfi_def_cfa_offset 10
+ 178               		.cfi_offset 29, -9
+ 179               	/* prologue: function */
+ 180               	/* frame size = 0 */
+ 181               	/* stack size = 8 */
+ 182               	.L__stack_usage = 8
+ 183 008a EC01      		movw r28,r24
+ 184               	.LVL10:
+ 185 008c 8C01      		movw r16,r24
+ 186               	.LBB15:
+  26:usart.h       **** 	for(uint32_t i = 0; i < strlen(data); i++){
+ 187               		.loc 2 26 0
+ 188 008e C12C      		mov r12,__zero_reg__
+ 189 0090 D12C      		mov r13,__zero_reg__
+ 190 0092 7601      		movw r14,r12
+ 191               	.LVL11:
+ 192               	.L14:
+ 193               		.loc 2 26 0 is_stmt 0 discriminator 1
+ 194 0094 FE01      		movw r30,r28
+ 195               		0:
+ 196 0096 0190      		ld __tmp_reg__,Z+
+ 197 0098 0020      		tst __tmp_reg__
+ 198 009a 01F4      		brne 0b
+ 199 009c 3197      		sbiw r30,1
+ 200 009e EC1B      		sub r30,r28
+ 201 00a0 FD0B      		sbc r31,r29
+ 202 00a2 CF01      		movw r24,r30
+ 203 00a4 B0E0      		ldi r27,0
+ 204 00a6 A0E0      		ldi r26,0
+ 205 00a8 C816      		cp r12,r24
+ 206 00aa D906      		cpc r13,r25
+ 207 00ac EA06      		cpc r14,r26
+ 208 00ae FB06      		cpc r15,r27
+ 209 00b0 00F0      		brlo .L15
+ 210               	.LBE15:
+  27:usart.h       **** 		usartTransmit(data[i]);
+  28:usart.h       **** 	}
+  29:usart.h       **** 	usartTransmit('\n');
+ 211               		.loc 2 29 0 is_stmt 1
+ 212 00b2 8AE0      		ldi r24,lo8(10)
+ 213               	/* epilogue start */
+  30:usart.h       **** }
+ 214               		.loc 2 30 0
+ 215 00b4 DF91      		pop r29
+ 216 00b6 CF91      		pop r28
+ 217               	.LVL12:
+ 218 00b8 1F91      		pop r17
+ 219 00ba 0F91      		pop r16
+ 220 00bc FF90      		pop r15
+ 221 00be EF90      		pop r14
+ 222 00c0 DF90      		pop r13
+ 223 00c2 CF90      		pop r12
+ 224               	.LVL13:
+  29:usart.h       **** }
+ 225               		.loc 2 29 0
+ 226 00c4 0C94 0000 		jmp usartTransmit
+ 227               	.LVL14:
+ 228               	.L15:
+ 229               	.LBB16:
+  27:usart.h       **** 		usartTransmit(data[i]);
+ 230               		.loc 2 27 0 discriminator 3
+ 231 00c8 F801      		movw r30,r16
+ 232 00ca 8191      		ld r24,Z+
+ 233 00cc 8F01      		movw r16,r30
+ 234 00ce 0E94 0000 		call usartTransmit
+ 235               	.LVL15:
+  26:usart.h       **** 		usartTransmit(data[i]);
+ 236               		.loc 2 26 0 discriminator 3
+ 237 00d2 FFEF      		ldi r31,-1
+ 238 00d4 CF1A      		sub r12,r31
+ 239 00d6 DF0A      		sbc r13,r31
+ 240 00d8 EF0A      		sbc r14,r31
+ 241 00da FF0A      		sbc r15,r31
+ 242               	.LVL16:
+ 243 00dc 00C0      		rjmp .L14
+ 244               	.LBE16:
+ 245               		.cfi_endproc
+ 246               	.LFE8:
+ 248               	.global	serialPrint
+ 250               	serialPrint:
+ 251               	.LFB9:
+  31:usart.h       **** 
+  32:usart.h       **** void serialPrint(char* data){
+ 252               		.loc 2 32 0
+ 253               		.cfi_startproc
+ 254               	.LVL17:
+ 255 00de CF92      		push r12
+ 256               	.LCFI8:
+ 257               		.cfi_def_cfa_offset 3
+ 258               		.cfi_offset 12, -2
+ 259 00e0 DF92      		push r13
+ 260               	.LCFI9:
+ 261               		.cfi_def_cfa_offset 4
+ 262               		.cfi_offset 13, -3
+ 263 00e2 EF92      		push r14
+ 264               	.LCFI10:
+ 265               		.cfi_def_cfa_offset 5
+ 266               		.cfi_offset 14, -4
+ 267 00e4 FF92      		push r15
+ 268               	.LCFI11:
+ 269               		.cfi_def_cfa_offset 6
+ 270               		.cfi_offset 15, -5
+ 271 00e6 0F93      		push r16
+ 272               	.LCFI12:
+ 273               		.cfi_def_cfa_offset 7
+ 274               		.cfi_offset 16, -6
+ 275 00e8 1F93      		push r17
+ 276               	.LCFI13:
+ 277               		.cfi_def_cfa_offset 8
+ 278               		.cfi_offset 17, -7
+ 279 00ea CF93      		push r28
+ 280               	.LCFI14:
+ 281               		.cfi_def_cfa_offset 9
+ 282               		.cfi_offset 28, -8
+ 283 00ec DF93      		push r29
+ 284               	.LCFI15:
+ 285               		.cfi_def_cfa_offset 10
+ 286               		.cfi_offset 29, -9
+ 287               	/* prologue: function */
+ 288               	/* frame size = 0 */
+ 289               	/* stack size = 8 */
+ 290               	.L__stack_usage = 8
+ 291 00ee EC01      		movw r28,r24
+ 292               	.LVL18:
+ 293 00f0 8C01      		movw r16,r24
+ 294               	.LBB17:
+  33:usart.h       **** 	for(uint32_t i = 0; i < strlen(data); i++){
+ 295               		.loc 2 33 0
+ 296 00f2 C12C      		mov r12,__zero_reg__
+ 297 00f4 D12C      		mov r13,__zero_reg__
+ 298 00f6 7601      		movw r14,r12
+ 299               	.LVL19:
+ 300               	.L17:
+ 301               		.loc 2 33 0 is_stmt 0 discriminator 1
+ 302 00f8 FE01      		movw r30,r28
+ 303               		0:
+ 304 00fa 0190      		ld __tmp_reg__,Z+
+ 305 00fc 0020      		tst __tmp_reg__
+ 306 00fe 01F4      		brne 0b
+ 307 0100 3197      		sbiw r30,1
+ 308 0102 EC1B      		sub r30,r28
+ 309 0104 FD0B      		sbc r31,r29
+ 310 0106 CF01      		movw r24,r30
+ 311 0108 B0E0      		ldi r27,0
+ 312 010a A0E0      		ldi r26,0
+ 313 010c C816      		cp r12,r24
+ 314 010e D906      		cpc r13,r25
+ 315 0110 EA06      		cpc r14,r26
+ 316 0112 FB06      		cpc r15,r27
+ 317 0114 00F0      		brlo .L18
+ 318               	/* epilogue start */
+ 319               	.LBE17:
+  34:usart.h       **** 		usartTransmit(data[i]);
+  35:usart.h       **** 	}
+  36:usart.h       **** }...
+ 320               		.loc 2 36 0 is_stmt 1
+ 321 0116 DF91      		pop r29
+ 322 0118 CF91      		pop r28
+ 323               	.LVL20:
+ 324 011a 1F91      		pop r17
+ 325 011c 0F91      		pop r16
+ 326 011e FF90      		pop r15
+ 327 0120 EF90      		pop r14
+ 328 0122 DF90      		pop r13
+ 329 0124 CF90      		pop r12
+ 330               	.LVL21:
+ 331 0126 0895      		ret
+ 332               	.LVL22:
+ 333               	.L18:
+ 334               	.LBB18:
+  34:usart.h       **** 		usartTransmit(data[i]);
+ 335               		.loc 2 34 0 discriminator 3
+ 336 0128 F801      		movw r30,r16
+ 337 012a 8191      		ld r24,Z+
+ 338 012c 8F01      		movw r16,r30
+ 339 012e 0E94 0000 		call usartTransmit
+ 340               	.LVL23:
+  33:usart.h       **** 	for(uint32_t i = 0; i < strlen(data); i++){
+ 341               		.loc 2 33 0 discriminator 3
+ 342 0132 FFEF      		ldi r31,-1
+ 343 0134 CF1A      		sub r12,r31
+ 344 0136 DF0A      		sbc r13,r31
+ 345 0138 EF0A      		sbc r14,r31
+ 346 013a FF0A      		sbc r15,r31
+ 347               	.LVL24:
+ 348 013c 00C0      		rjmp .L17
+ 349               	.LBE18:
+ 350               		.cfi_endproc
+ 351               	.LFE9:
+ 353               	.global	spiInit
+ 355               	spiInit:
+ 356               	.LFB10:
+ 357               		.file 3 "spi.h"
+   1:spi.h         **** #define SPI_DDR 	DDRB
+   2:spi.h         **** #define SPI_PORT	PORTB
+   3:spi.h         **** #define SS 			PB2
+   4:spi.h         **** #define SCK			PB5
+   5:spi.h         **** #define MOSI		PB3
+   6:spi.h         **** #define MISO		PB4
+   7:spi.h         **** 
+   8:spi.h         **** #include <avr/io.h>
+   9:spi.h         **** 
+  10:spi.h         **** void spiInit(void);
+  11:spi.h         **** uint8_t spiTransfer(uint8_t data);
+  12:spi.h         **** 
+  13:spi.h         **** void spiInit(void){
+ 358               		.loc 3 13 0
+ 359               		.cfi_startproc
+ 360               	/* prologue: function */
+ 361               	/* frame size = 0 */
+ 362               	/* stack size = 0 */
+ 363               	.L__stack_usage = 0
+  14:spi.h         **** 
+  15:spi.h         **** 	if(!(SPI_DDR & SS))
+ 364               		.loc 3 15 0
+ 365 013e 219B      		sbis 0x4,1
+  16:spi.h         **** 		SPI_PORT |= (1 << SS);
+ 366               		.loc 3 16 0
+ 367 0140 2A9A      		sbi 0x5,2
+ 368               	.L20:
+  17:spi.h         **** 
+  18:spi.h         **** 	SPI_DDR |= (1 << SS);
+ 369               		.loc 3 18 0
+ 370 0142 229A      		sbi 0x4,2
+  19:spi.h         **** 
+  20:spi.h         **** 	SPI_DDR |= (1 << SCK) | (1 << MOSI);
+ 371               		.loc 3 20 0
+ 372 0144 84B1      		in r24,0x4
+ 373 0146 8862      		ori r24,lo8(40)
+ 374 0148 84B9      		out 0x4,r24
+  21:spi.h         **** 	SPCR |= (1 << SPE) | (1 << MSTR) | (1 << SPR0);
+ 375               		.loc 3 21 0
+ 376 014a 8CB5      		in r24,0x2c
+ 377 014c 8165      		ori r24,lo8(81)
+ 378 014e 8CBD      		out 0x2c,r24
+ 379               	/* epilogue start */
+  22:spi.h         **** }
+ 380               		.loc 3 22 0
+ 381 0150 0895      		ret
+ 382               		.cfi_endproc
+ 383               	.LFE10:
+ 385               	.global	spiTransfer
+ 387               	spiTransfer:
+ 388               	.LFB11:
+  23:spi.h         **** 
+  24:spi.h         **** uint8_t spiTransfer(uint8_t data){
+ 389               		.loc 3 24 0
+ 390               		.cfi_startproc
+ 391               	.LVL25:
+ 392               	/* prologue: function */
+ 393               	/* frame size = 0 */
+ 394               	/* stack size = 0 */
+ 395               	.L__stack_usage = 0
+  25:spi.h         **** 	//SPI_PORT &= ~(1 << SS);
+  26:spi.h         **** 	SPDR = data;
+ 396               		.loc 3 26 0
+ 397 0152 8EBD      		out 0x2e,r24
+ 398               	.L22:
+  27:spi.h         **** 	while(!(SPSR & (1 << SPIF)));
+ 399               		.loc 3 27 0 discriminator 1
+ 400 0154 0DB4      		in __tmp_reg__,0x2d
+ 401 0156 07FE      		sbrs __tmp_reg__,7
+ 402 0158 00C0      		rjmp .L22
+  28:spi.h         **** 	//SPI_PORT |= (1 << SS);
+  29:spi.h         **** 	return SPDR;
+ 403               		.loc 3 29 0
+ 404 015a 8EB5      		in r24,0x2e
+ 405               	.LVL26:
+ 406               	/* epilogue start */
+  30:spi.h         **** }...
+ 407               		.loc 3 30 0
+ 408 015c 0895      		ret
+ 409               		.cfi_endproc
+ 410               	.LFE11:
+ 413               	getWord:
+ 414               	.LFB20:
+ 142:pixy.h        ****   // ordering is big endian because Pixy is sending 16 bits through SPI 
+ 415               		.loc 1 142 0
+ 416               		.cfi_startproc
+ 417 015e CF93      		push r28
+ 418               	.LCFI16:
+ 419               		.cfi_def_cfa_offset 3
+ 420               		.cfi_offset 28, -2
+ 421 0160 DF93      		push r29
+ 422               	.LCFI17:
+ 423               		.cfi_def_cfa_offset 4
+ 424               		.cfi_offset 29, -3
+ 425               	/* prologue: function */
+ 426               	/* frame size = 0 */
+ 427               	/* stack size = 2 */
+ 428               	.L__stack_usage = 2
+ 429               	.LVL27:
+ 147:pixy.h        ****   {
+ 430               		.loc 1 147 0
+ 431 0162 C091 0000 		lds r28,g_outLen
+ 432 0166 CC23      		tst r28
+ 433 0168 01F0      		breq .L25
+ 434               	.LVL28:
+ 435               	.LBB19:
+ 436               	.LBB20:
+ 132:pixy.h        **** }
+ 437               		.loc 1 132 0
+ 438 016a 8BE5      		ldi r24,lo8(91)
+ 439 016c 0E94 0000 		call spiTransfer
+ 440               	.LVL29:
+ 441               	.LBE20:
+ 442               	.LBE19:
+ 149:pixy.h        ****     cout = g_outBuf[g_outReadIndex++];
+ 443               		.loc 1 149 0
+ 444 0170 282F      		mov r18,r24
+ 445 0172 30E0      		ldi r19,0
+ 446               	.LVL30:
+ 150:pixy.h        ****     g_outLen--;
+ 447               		.loc 1 150 0
+ 448 0174 E091 0000 		lds r30,g_outReadIndex
+ 449 0178 91E0      		ldi r25,lo8(1)
+ 450 017a 9E0F      		add r25,r30
+ 451 017c 9093 0000 		sts g_outReadIndex,r25
+ 452 0180 F0E0      		ldi r31,0
+ 453 0182 E050      		subi r30,lo8(-(g_outBuf))
+ 454 0184 F040      		sbci r31,hi8(-(g_outBuf))
+ 455 0186 8081      		ld r24,Z
+ 456               	.LVL31:
+ 151:pixy.h        ****     if (g_outReadIndex==PIXY_OUTBUF_SIZE)
+ 457               		.loc 1 151 0
+ 458 0188 C150      		subi r28,lo8(-(-1))
+ 459 018a C093 0000 		sts g_outLen,r28
+ 152:pixy.h        ****       g_outReadIndex = 0; 
+ 460               		.loc 1 152 0
+ 461 018e 9034      		cpi r25,lo8(64)
+ 462 0190 01F4      		brne .L26
+ 153:pixy.h        ****   }
+ 463               		.loc 1 153 0
+ 464 0192 1092 0000 		sts g_outReadIndex,__zero_reg__
+ 465               	.LVL32:
+ 466               	.L26:
+ 157:pixy.h        ****   c = getByte(cout); // send out data byte
+ 467               		.loc 1 157 0
+ 468 0196 D22F      		mov r29,r18
+ 469 0198 CC27      		clr r28
+ 470               	.LVL33:
+ 471               	.LBB21:
+ 472               	.LBB22:
+ 132:pixy.h        **** }
+ 473               		.loc 1 132 0
+ 474 019a 0E94 0000 		call spiTransfer
+ 475               	.LVL34:
+ 476               	.LBE22:
+ 477               	.LBE21:
+ 162:pixy.h        **** 
+ 478               		.loc 1 162 0
+ 479 019e 9E01      		movw r18,r28
+ 480 01a0 282B      		or r18,r24
+ 481 01a2 C901      		movw r24,r18
+ 482               	.LVL35:
+ 483               	/* epilogue start */
+ 484 01a4 DF91      		pop r29
+ 485 01a6 CF91      		pop r28
+ 486 01a8 0895      		ret
+ 487               	.LVL36:
+ 488               	.L25:
+ 489               	.LBB23:
+ 490               	.LBB24:
+ 132:pixy.h        **** }
+ 491               		.loc 1 132 0
+ 492 01aa 8AE5      		ldi r24,lo8(90)
+ 493 01ac 0E94 0000 		call spiTransfer
+ 494               	.LVL37:
+ 495               	.LBE24:
+ 496               	.LBE23:
+ 156:pixy.h        ****   w <<= 8;
+ 497               		.loc 1 156 0
+ 498 01b0 282F      		mov r18,r24
+ 499 01b2 30E0      		ldi r19,0
+ 500               	.LVL38:
+ 145:pixy.h        **** 
+ 501               		.loc 1 145 0
+ 502 01b4 80E0      		ldi r24,0
+ 503 01b6 00C0      		rjmp .L26
+ 504               		.cfi_endproc
+ 505               	.LFE20:
+ 507               		.section	.rodata.str1.1,"aMS",@progbits,1
+ 508               	.LC0:
+ 509 0000 4343 2062 		.string	"CC block! sig: %s (%d decimal) x: %d y: %d width: %d height: %d angle %d\n"
+ 509      6C6F 636B 
+ 509      2120 7369 
+ 509      673A 2025 
+ 509      7320 2825 
+ 510               	.LC1:
+ 511 004a 7369 673A 		.string	"sig: %d x: %d y: %d width: %d height: %d\n"
+ 511      2025 6420 
+ 511      783A 2025 
+ 511      6420 793A 
+ 511      2025 6420 
+ 512               		.text
+ 513               	.global	print
+ 515               	print:
+ 516               	.LFB17:
+  58:pixy.h        ****     int i, j;
+ 517               		.loc 1 58 0
+ 518               		.cfi_startproc
+ 519 01b8 BF92      		push r11
+ 520               	.LCFI18:
+ 521               		.cfi_def_cfa_offset 3
+ 522               		.cfi_offset 11, -2
+ 523 01ba CF92      		push r12
+ 524               	.LCFI19:
+ 525               		.cfi_def_cfa_offset 4
+ 526               		.cfi_offset 12, -3
+ 527 01bc DF92      		push r13
+ 528               	.LCFI20:
+ 529               		.cfi_def_cfa_offset 5
+ 530               		.cfi_offset 13, -4
+ 531 01be EF92      		push r14
+ 532               	.LCFI21:
+ 533               		.cfi_def_cfa_offset 6
+ 534               		.cfi_offset 14, -5
+ 535 01c0 FF92      		push r15
+ 536               	.LCFI22:
+ 537               		.cfi_def_cfa_offset 7
+ 538               		.cfi_offset 15, -6
+ 539 01c2 0F93      		push r16
+ 540               	.LCFI23:
+ 541               		.cfi_def_cfa_offset 8
+ 542               		.cfi_offset 16, -7
+ 543 01c4 1F93      		push r17
+ 544               	.LCFI24:
+ 545               		.cfi_def_cfa_offset 9
+ 546               		.cfi_offset 17, -8
+ 547 01c6 CF93      		push r28
+ 548               	.LCFI25:
+ 549               		.cfi_def_cfa_offset 10
+ 550               		.cfi_offset 28, -9
+ 551 01c8 DF93      		push r29
+ 552               	.LCFI26:
+ 553               		.cfi_def_cfa_offset 11
+ 554               		.cfi_offset 29, -10
+ 555 01ca CDB7      		in r28,__SP_L__
+ 556 01cc DEB7      		in r29,__SP_H__
+ 557               	.LCFI27:
+ 558               		.cfi_def_cfa_register 28
+ 559 01ce C259      		subi r28,-110
+ 560 01d0 D109      		sbc r29,__zero_reg__
+ 561               	.LCFI28:
+ 562               		.cfi_def_cfa_offset 157
+ 563 01d2 0FB6      		in __tmp_reg__,__SREG__
+ 564 01d4 F894      		cli
+ 565 01d6 DEBF      		out __SP_H__,r29
+ 566 01d8 0FBE      		out __SREG__,__tmp_reg__
+ 567 01da CDBF      		out __SP_L__,r28
+ 568               	/* prologue: function */
+ 569               	/* frame size = 146 */
+ 570               	/* stack size = 155 */
+ 571               	.L__stack_usage = 155
+ 572 01dc C957      		subi r28,lo8(-135)
+ 573 01de DF4F      		sbci r29,hi8(-135)
+ 574 01e0 E882      		st Y,r14
+ 575 01e2 C758      		subi r28,lo8(135)
+ 576 01e4 D040      		sbci r29,hi8(135)
+ 577 01e6 C857      		subi r28,lo8(-136)
+ 578 01e8 DF4F      		sbci r29,hi8(-136)
+ 579 01ea F882      		st Y,r15
+ 580 01ec C858      		subi r28,lo8(136)
+ 581 01ee D040      		sbci r29,hi8(136)
+ 582 01f0 CF56      		subi r28,lo8(-145)
+ 583 01f2 DF4F      		sbci r29,hi8(-145)
+ 584 01f4 8883      		st Y,r24
+ 585 01f6 C159      		subi r28,lo8(145)
+ 586 01f8 D040      		sbci r29,hi8(145)
+ 587 01fa CE56      		subi r28,lo8(-146)
+ 588 01fc DF4F      		sbci r29,hi8(-146)
+ 589 01fe 9883      		st Y,r25
+ 590 0200 C259      		subi r28,lo8(146)
+ 591 0202 D040      		sbci r29,hi8(146)
+ 592 0204 C957      		subi r28,lo8(-135)
+ 593 0206 DF4F      		sbci r29,hi8(-135)
+ 594 0208 8881      		ld r24,Y
+ 595 020a 9981      		ldd r25,Y+1
+ 596 020c C758      		subi r28,lo8(135)
+ 597 020e D040      		sbci r29,hi8(135)
+ 598               	.LVL39:
+ 599 0210 D62E      		mov r13,r22
+ 600 0212 C72E      		mov r12,r23
+ 601               	.LVL40:
+  63:pixy.h        ****     {
+ 602               		.loc 1 63 0
+ 603 0214 8830      		cpi r24,8
+ 604 0216 9105      		cpc r25,__zero_reg__
+ 605 0218 00F4      		brsh .+2
+ 606 021a 00C0      		rjmp .L28
+  66:pixy.h        ****       {
+ 607               		.loc 1 66 0
+ 608 021c F12C      		mov r15,__zero_reg__
+ 609 021e F0E0      		ldi r31,0
+ 610 0220 E0E0      		ldi r30,0
+ 611 0222 6CE0      		ldi r22,lo8(12)
+ 612 0224 70E0      		ldi r23,0
+ 613               	.L31:
+ 614               	.LVL41:
+  68:pixy.h        ****         if (d>0 && !flag)
+ 615               		.loc 1 68 0
+ 616 0226 DC01      		movw r26,r24
+ 617 0228 062E      		mov r0,r22
+ 618 022a 00C0      		rjmp 2f
+ 619               		1:
+ 620 022c B695      		lsr r27
+ 621 022e A795      		ror r26
+ 622               		2:
+ 623 0230 0A94      		dec r0
+ 624 0232 02F4      		brpl 1b
+ 625 0234 A770      		andi r26,lo8(7)
+ 626               	.LVL42:
+  69:pixy.h        ****           flag = 1;
+ 627               		.loc 1 69 0
+ 628 0236 01F4      		brne .L29
+  71:pixy.h        ****           sig[j++] = d + '0';
+ 629               		.loc 1 71 0
+ 630 0238 FF20      		tst r15
+ 631 023a 01F0      		breq .L30
+ 632               	.L29:
+ 633               	.LVL43:
+  72:pixy.h        ****       }
+ 634               		.loc 1 72 0
+ 635 023c B1E8      		ldi r27,lo8(-127)
+ 636 023e EB2E      		mov r14,r27
+ 637 0240 F12C      		mov r15,__zero_reg__
+ 638 0242 EC0E      		add r14,r28
+ 639 0244 FD1E      		adc r15,r29
+ 640 0246 EE0E      		add r14,r30
+ 641 0248 FF1E      		adc r15,r31
+ 642 024a B0E3      		ldi r27,lo8(48)
+ 643 024c BB2E      		mov r11,r27
+ 644 024e BA0E      		add r11,r26
+ 645 0250 D701      		movw r26,r14
+ 646               	.LVL44:
+ 647 0252 BC92      		st X,r11
+ 648 0254 3196      		adiw r30,1
+ 649               	.LVL45:
+ 650 0256 FF24      		clr r15
+ 651 0258 F394      		inc r15
+ 652               	.LVL46:
+ 653               	.L30:
+  66:pixy.h        ****       {
+ 654               		.loc 1 66 0 discriminator 2
+ 655 025a 6350      		subi r22,3
+ 656 025c 7109      		sbc r23,__zero_reg__
+ 657               	.LVL47:
+ 658 025e 6D3F      		cpi r22,-3
+ 659 0260 BFEF      		ldi r27,-1
+ 660 0262 7B07      		cpc r23,r27
+ 661 0264 01F4      		brne .L31
+  74:pixy.h        ****       sprintf(buf, "CC block! sig: %s (%d decimal) x: %d y: %d width: %d height: %d angle %d\n", si
+ 662               		.loc 1 74 0
+ 663 0266 BE01      		movw r22,r28
+ 664               	.LVL48:
+ 665 0268 6F57      		subi r22,127
+ 666 026a 7F4F      		sbci r23,-1
+ 667 026c E60F      		add r30,r22
+ 668 026e F71F      		adc r31,r23
+ 669               	.LVL49:
+ 670 0270 1082      		st Z,__zero_reg__
+  75:pixy.h        ****     }     
+ 671               		.loc 1 75 0
+ 672 0272 CE56      		subi r28,lo8(-146)
+ 673 0274 DF4F      		sbci r29,hi8(-146)
+ 674 0276 E881      		ld r30,Y
+ 675 0278 C259      		subi r28,lo8(146)
+ 676 027a D040      		sbci r29,hi8(146)
+ 677 027c EF93      		push r30
+ 678 027e CF56      		subi r28,lo8(-145)
+ 679 0280 DF4F      		sbci r29,hi8(-145)
+ 680 0282 E881      		ld r30,Y
+ 681 0284 C159      		subi r28,lo8(145)
+ 682 0286 D040      		sbci r29,hi8(145)
+ 683 0288 EF93      		push r30
+ 684 028a CF92      		push r12
+ 685 028c DF92      		push r13
+ 686 028e 5F93      		push r21
+ 687 0290 4F93      		push r20
+ 688 0292 3F93      		push r19
+ 689 0294 2F93      		push r18
+ 690 0296 1F93      		push r17
+ 691 0298 0F93      		push r16
+ 692 029a 9F93      		push r25
+ 693 029c 8F93      		push r24
+ 694 029e 7F93      		push r23
+ 695 02a0 6F93      		push r22
+ 696 02a2 80E0      		ldi r24,lo8(.LC0)
+ 697 02a4 90E0      		ldi r25,hi8(.LC0)
+ 698               	.LVL50:
+ 699 02a6 9F93      		push r25
+ 700 02a8 8F93      		push r24
+ 701 02aa CE01      		movw r24,r28
+ 702 02ac 0196      		adiw r24,1
+ 703 02ae 9F93      		push r25
+ 704 02b0 8F93      		push r24
+ 705 02b2 0E94 0000 		call sprintf
+ 706               	.LVL51:
+ 707               	.L37:
+  78:pixy.h        ****     serialPrint(buf); 
+ 708               		.loc 1 78 0
+ 709 02b6 0FB6      		in __tmp_reg__,__SREG__
+ 710 02b8 F894      		cli
+ 711 02ba DEBF      		out __SP_H__,r29
+ 712 02bc 0FBE      		out __SREG__,__tmp_reg__
+ 713 02be CDBF      		out __SP_L__,r28
+  79:pixy.h        ****   }
+ 714               		.loc 1 79 0
+ 715 02c0 CE01      		movw r24,r28
+ 716 02c2 0196      		adiw r24,1
+ 717 02c4 0E94 0000 		call serialPrint
+ 718               	.LVL52:
+ 719               	/* epilogue start */
+  80:pixy.h        **** 
+ 720               		.loc 1 80 0
+ 721 02c8 CE56      		subi r28,110
+ 722 02ca DF4F      		sbci r29,-1
+ 723 02cc 0FB6      		in __tmp_reg__,__SREG__
+ 724 02ce F894      		cli
+ 725 02d0 DEBF      		out __SP_H__,r29
+ 726 02d2 0FBE      		out __SREG__,__tmp_reg__
+ 727 02d4 CDBF      		out __SP_L__,r28
+ 728 02d6 DF91      		pop r29
+ 729 02d8 CF91      		pop r28
+ 730 02da 1F91      		pop r17
+ 731               	.LVL53:
+ 732 02dc 0F91      		pop r16
+ 733 02de FF90      		pop r15
+ 734 02e0 EF90      		pop r14
+ 735 02e2 DF90      		pop r13
+ 736               	.LVL54:
+ 737 02e4 CF90      		pop r12
+ 738 02e6 BF90      		pop r11
+ 739 02e8 0895      		ret
+ 740               	.LVL55:
+ 741               	.L28:
+  78:pixy.h        ****     serialPrint(buf); 
+ 742               		.loc 1 78 0
+ 743 02ea 7F93      		push r23
+ 744 02ec 6F93      		push r22
+ 745 02ee 5F93      		push r21
+ 746 02f0 4F93      		push r20
+ 747 02f2 3F93      		push r19
+ 748 02f4 2F93      		push r18
+ 749 02f6 1F93      		push r17
+ 750 02f8 0F93      		push r16
+ 751 02fa 9F93      		push r25
+ 752 02fc 8F93      		push r24
+ 753 02fe 80E0      		ldi r24,lo8(.LC1)
+ 754 0300 90E0      		ldi r25,hi8(.LC1)
+ 755               	.LVL56:
+ 756 0302 9F93      		push r25
+ 757 0304 8F93      		push r24
+ 758 0306 CE01      		movw r24,r28
+ 759 0308 0196      		adiw r24,1
+ 760 030a 9F93      		push r25
+ 761 030c 8F93      		push r24
+ 762 030e 0E94 0000 		call sprintf
+ 763               	.LVL57:
+ 764 0312 00C0      		rjmp .L37
+ 765               		.cfi_endproc
+ 766               	.LFE17:
+ 768               	.global	getByte
+ 770               	getByte:
+ 771               	.LFB19:
+ 131:pixy.h        ****   return spiTransfer(out);
+ 772               		.loc 1 131 0
+ 773               		.cfi_startproc
+ 774               	.LVL58:
+ 775               	/* prologue: function */
+ 776               	/* frame size = 0 */
+ 777               	/* stack size = 0 */
+ 778               	.L__stack_usage = 0
+ 132:pixy.h        **** }
+ 779               		.loc 1 132 0
+ 780 0314 0C94 0000 		jmp spiTransfer
+ 781               	.LVL59:
+ 782               		.cfi_endproc
+ 783               	.LFE19:
+ 785               	.global	init
+ 787               	init:
+ 788               	.LFB22:
+ 182:pixy.h        **** 
+ 183:pixy.h        **** #endif //////////////// end SPI routines
+ 184:pixy.h        **** 
+ 185:pixy.h        **** //Pixy
+ 186:pixy.h        **** static int g_skipStart = 0;
+ 187:pixy.h        **** static BlockType g_blockType;
+ 188:pixy.h        **** static Block *g_blocks;
+ 189:pixy.h        **** 
+ 190:pixy.h        **** void init(void)
+ 191:pixy.h        **** {
+ 789               		.loc 1 191 0
+ 790               		.cfi_startproc
+ 791               	/* prologue: function */
+ 792               	/* frame size = 0 */
+ 793               	/* stack size = 0 */
+ 794               	.L__stack_usage = 0
+ 192:pixy.h        ****   g_blocks = (Block *)malloc(sizeof(Block)*PIXY_ARRAYSIZE);
+ 795               		.loc 1 192 0
+ 796 0318 80EB      		ldi r24,lo8(-80)
+ 797 031a 94E0      		ldi r25,lo8(4)
+ 798 031c 0E94 0000 		call malloc
+ 799               	.LVL60:
+ 800 0320 9093 0000 		sts g_blocks+1,r25
+ 801 0324 8093 0000 		sts g_blocks,r24
+ 802               	/* epilogue start */
+ 193:pixy.h        **** }
+ 803               		.loc 1 193 0
+ 804 0328 0895      		ret
+ 805               		.cfi_endproc
+ 806               	.LFE22:
+ 808               	.global	pixyInit
+ 810               	pixyInit:
+ 811               	.LFB18:
+  88:pixy.h        **** 	init();
+ 812               		.loc 1 88 0
+ 813               		.cfi_startproc
+ 814               	/* prologue: function */
+ 815               	/* frame size = 0 */
+ 816               	/* stack size = 0 */
+ 817               	.L__stack_usage = 0
+  89:pixy.h        **** }
+ 818               		.loc 1 89 0
+ 819 032a 0C94 0000 		jmp init
+ 820               	.LVL61:
+ 821               		.cfi_endproc
+ 822               	.LFE18:
+ 824               	.global	getStart
+ 826               	getStart:
+ 827               	.LFB23:
+ 194:pixy.h        **** 
+ 195:pixy.h        **** int getStart(void){
+ 828               		.loc 1 195 0
+ 829               		.cfi_startproc
+ 830 032e 0F93      		push r16
+ 831               	.LCFI29:
+ 832               		.cfi_def_cfa_offset 3
+ 833               		.cfi_offset 16, -2
+ 834 0330 1F93      		push r17
+ 835               	.LCFI30:
+ 836               		.cfi_def_cfa_offset 4
+ 837               		.cfi_offset 17, -3
+ 838 0332 CF93      		push r28
+ 839               	.LCFI31:
+ 840               		.cfi_def_cfa_offset 5
+ 841               		.cfi_offset 28, -4
+ 842 0334 DF93      		push r29
+ 843               	.LCFI32:
+ 844               		.cfi_def_cfa_offset 6
+ 845               		.cfi_offset 29, -5
+ 846               	/* prologue: function */
+ 847               	/* frame size = 0 */
+ 848               	/* stack size = 4 */
+ 849               	.L__stack_usage = 4
+ 850               	.LVL62:
+ 196:pixy.h        **** 	uint16_t w, lastw;
+ 197:pixy.h        **** 
+ 198:pixy.h        **** 	lastw = 0xffff; //non zero initial value
+ 851               		.loc 1 198 0
+ 852 0336 0FEF      		ldi r16,lo8(-1)
+ 853 0338 1FEF      		ldi r17,lo8(-1)
+ 854               	.LVL63:
+ 855               	.L42:
+ 199:pixy.h        **** 
+ 200:pixy.h        **** 	while(1){
+ 201:pixy.h        **** 		w = getWord();
+ 856               		.loc 1 201 0
+ 857 033a 0E94 0000 		call getWord
+ 858               	.LVL64:
+ 859 033e EC01      		movw r28,r24
+ 860               	.LVL65:
+ 202:pixy.h        **** 		if(w == 0 &&  lastw == 0){
+ 861               		.loc 1 202 0
+ 862 0340 892B      		or r24,r25
+ 863 0342 01F4      		brne .L43
+ 864               		.loc 1 202 0 is_stmt 0 discriminator 1
+ 865 0344 012B      		or r16,r17
+ 866 0346 01F4      		brne .L45
+ 203:pixy.h        **** 			return 0; //No data found
+ 867               		.loc 1 203 0 is_stmt 1
+ 868 0348 90E0      		ldi r25,0
+ 869 034a 80E0      		ldi r24,0
+ 870               	.LVL66:
+ 871 034c 00C0      		rjmp .L41
+ 872               	.LVL67:
+ 873               	.L43:
+ 204:pixy.h        **** 		}else if(w == PIXY_START_WORD && lastw == PIXY_START_WORD){
+ 874               		.loc 1 204 0
+ 875 034e C535      		cpi r28,85
+ 876 0350 8AEA      		ldi r24,-86
+ 877 0352 D807      		cpc r29,r24
+ 878               	.LVL68:
+ 879 0354 01F4      		brne .L46
+ 880               		.loc 1 204 0 is_stmt 0 discriminator 1
+ 881 0356 0535      		cpi r16,85
+ 882 0358 1A4A      		sbci r17,-86
+ 883 035a 01F4      		brne .L45
+ 205:pixy.h        **** 			g_blockType = NORMAL_BLOCK; //Normal block found so remember
+ 884               		.loc 1 205 0 is_stmt 1
+ 885 035c 1092 0000 		sts g_blockType,__zero_reg__
+ 886               	.L49:
+ 206:pixy.h        **** 			return 1; //Found data
+ 207:pixy.h        **** 		}else if(w == PIXY_START_WORD_CC && lastw == PIXY_START_WORD){
+ 208:pixy.h        **** 			g_blockType = CC_BLOCK; //Color block found so remember
+ 209:pixy.h        **** 			return 1; //Found data
+ 887               		.loc 1 209 0
+ 888 0360 81E0      		ldi r24,lo8(1)
+ 889 0362 90E0      		ldi r25,0
+ 890               	.L41:
+ 891               	/* epilogue start */
+ 210:pixy.h        **** 		}else if(w == PIXY_START_WORDX){
+ 211:pixy.h        **** 			getByte(0); //recorrect sync
+ 212:pixy.h        **** 		}
+ 213:pixy.h        **** 
+ 214:pixy.h        **** 		lastw = w; //save data
+ 215:pixy.h        **** 	}
+ 216:pixy.h        **** }
+ 892               		.loc 1 216 0
+ 893 0364 DF91      		pop r29
+ 894 0366 CF91      		pop r28
+ 895               	.LVL69:
+ 896 0368 1F91      		pop r17
+ 897 036a 0F91      		pop r16
+ 898               	.LVL70:
+ 899 036c 0895      		ret
+ 900               	.LVL71:
+ 901               	.L46:
+ 207:pixy.h        **** 			g_blockType = CC_BLOCK; //Color block found so remember
+ 902               		.loc 1 207 0
+ 903 036e C635      		cpi r28,86
+ 904 0370 8AEA      		ldi r24,-86
+ 905 0372 D807      		cpc r29,r24
+ 906 0374 01F4      		brne .L47
+ 207:pixy.h        **** 			g_blockType = CC_BLOCK; //Color block found so remember
+ 907               		.loc 1 207 0 is_stmt 0 discriminator 1
+ 908 0376 0535      		cpi r16,85
+ 909 0378 1A4A      		sbci r17,-86
+ 910 037a 01F4      		brne .L45
+ 208:pixy.h        **** 			return 1; //Found data
+ 911               		.loc 1 208 0 is_stmt 1
+ 912 037c 81E0      		ldi r24,lo8(1)
+ 913 037e 8093 0000 		sts g_blockType,r24
+ 914 0382 00C0      		rjmp .L49
+ 915               	.L47:
+ 210:pixy.h        **** 		}else if(w == PIXY_START_WORDX){
+ 916               		.loc 1 210 0
+ 917 0384 CA3A      		cpi r28,-86
+ 918 0386 85E5      		ldi r24,85
+ 919 0388 D807      		cpc r29,r24
+ 920 038a 01F4      		brne .L45
+ 211:pixy.h        **** 		}
+ 921               		.loc 1 211 0
+ 922 038c 80E0      		ldi r24,0
+ 923 038e 0E94 0000 		call getByte
+ 924               	.LVL72:
+ 925               	.L45:
+ 195:pixy.h        **** 	uint16_t w, lastw;
+ 926               		.loc 1 195 0
+ 927 0392 8E01      		movw r16,r28
+ 928               	.LVL73:
+ 929 0394 00C0      		rjmp .L42
+ 930               		.cfi_endproc
+ 931               	.LFE23:
+ 933               	.global	getBlocks
+ 935               	getBlocks:
+ 936               	.LFB24:
+ 217:pixy.h        **** 
+ 218:pixy.h        **** uint16_t getBlocks(uint16_t maxBlocks)
+ 219:pixy.h        **** {
+ 937               		.loc 1 219 0
+ 938               		.cfi_startproc
+ 939               	.LVL74:
+ 940 0396 3F92      		push r3
+ 941               	.LCFI33:
+ 942               		.cfi_def_cfa_offset 3
+ 943               		.cfi_offset 3, -2
+ 944 0398 4F92      		push r4
+ 945               	.LCFI34:
+ 946               		.cfi_def_cfa_offset 4
+ 947               		.cfi_offset 4, -3
+ 948 039a 5F92      		push r5
+ 949               	.LCFI35:
+ 950               		.cfi_def_cfa_offset 5
+ 951               		.cfi_offset 5, -4
+ 952 039c 6F92      		push r6
+ 953               	.LCFI36:
+ 954               		.cfi_def_cfa_offset 6
+ 955               		.cfi_offset 6, -5
+ 956 039e 7F92      		push r7
+ 957               	.LCFI37:
+ 958               		.cfi_def_cfa_offset 7
+ 959               		.cfi_offset 7, -6
+ 960 03a0 8F92      		push r8
+ 961               	.LCFI38:
+ 962               		.cfi_def_cfa_offset 8
+ 963               		.cfi_offset 8, -7
+ 964 03a2 9F92      		push r9
+ 965               	.LCFI39:
+ 966               		.cfi_def_cfa_offset 9
+ 967               		.cfi_offset 9, -8
+ 968 03a4 AF92      		push r10
+ 969               	.LCFI40:
+ 970               		.cfi_def_cfa_offset 10
+ 971               		.cfi_offset 10, -9
+ 972 03a6 BF92      		push r11
+ 973               	.LCFI41:
+ 974               		.cfi_def_cfa_offset 11
+ 975               		.cfi_offset 11, -10
+ 976 03a8 CF92      		push r12
+ 977               	.LCFI42:
+ 978               		.cfi_def_cfa_offset 12
+ 979               		.cfi_offset 12, -11
+ 980 03aa DF92      		push r13
+ 981               	.LCFI43:
+ 982               		.cfi_def_cfa_offset 13
+ 983               		.cfi_offset 13, -12
+ 984 03ac EF92      		push r14
+ 985               	.LCFI44:
+ 986               		.cfi_def_cfa_offset 14
+ 987               		.cfi_offset 14, -13
+ 988 03ae FF92      		push r15
+ 989               	.LCFI45:
+ 990               		.cfi_def_cfa_offset 15
+ 991               		.cfi_offset 15, -14
+ 992 03b0 0F93      		push r16
+ 993               	.LCFI46:
+ 994               		.cfi_def_cfa_offset 16
+ 995               		.cfi_offset 16, -15
+ 996 03b2 1F93      		push r17
+ 997               	.LCFI47:
+ 998               		.cfi_def_cfa_offset 17
+ 999               		.cfi_offset 17, -16
+ 1000 03b4 CF93      		push r28
+ 1001               	.LCFI48:
+ 1002               		.cfi_def_cfa_offset 18
+ 1003               		.cfi_offset 28, -17
+ 1004 03b6 DF93      		push r29
+ 1005               	.LCFI49:
+ 1006               		.cfi_def_cfa_offset 19
+ 1007               		.cfi_offset 29, -18
+ 1008               	/* prologue: function */
+ 1009               	/* frame size = 0 */
+ 1010               	/* stack size = 17 */
+ 1011               	.L__stack_usage = 17
+ 1012 03b8 3C01      		movw r6,r24
+ 220:pixy.h        ****   uint8_t i;
+ 221:pixy.h        ****   uint16_t w, blockCount, checksum, sum;
+ 222:pixy.h        ****   Block *block;
+ 223:pixy.h        **** 
+ 224:pixy.h        ****   if (!g_skipStart)
+ 1013               		.loc 1 224 0
+ 1014 03ba 8091 0000 		lds r24,g_skipStart
+ 1015 03be 9091 0000 		lds r25,g_skipStart+1
+ 1016               	.LVL75:
+ 1017 03c2 892B      		or r24,r25
+ 1018 03c4 01F4      		brne .L51
+ 225:pixy.h        ****   {
+ 226:pixy.h        ****     if (getStart()==0)
+ 1019               		.loc 1 226 0
+ 1020 03c6 0E94 0000 		call getStart
+ 1021               	.LVL76:
+ 1022 03ca 892B      		or r24,r25
+ 1023 03cc 01F4      		brne .L52
+ 1024               	.L64:
+ 227:pixy.h        ****       return 0;
+ 1025               		.loc 1 227 0
+ 1026 03ce D0E0      		ldi r29,0
+ 1027 03d0 C0E0      		ldi r28,0
+ 1028               	.L50:
+ 228:pixy.h        ****   }
+ 229:pixy.h        ****   else
+ 230:pixy.h        ****     g_skipStart = 0;
+ 231:pixy.h        **** 
+ 232:pixy.h        ****   for(blockCount=0; blockCount<maxBlocks && blockCount<PIXY_ARRAYSIZE;)
+ 233:pixy.h        ****   {
+ 234:pixy.h        ****     checksum = getWord();
+ 235:pixy.h        ****     if (checksum==PIXY_START_WORD) // we've reached the beginning of the next frame
+ 236:pixy.h        ****     {
+ 237:pixy.h        ****       g_skipStart = 1;
+ 238:pixy.h        ****       g_blockType = NORMAL_BLOCK;
+ 239:pixy.h        ****       return blockCount;
+ 240:pixy.h        ****     }
+ 241:pixy.h        ****     else if (checksum==PIXY_START_WORD_CC)
+ 242:pixy.h        ****     {
+ 243:pixy.h        ****       g_skipStart = 1;
+ 244:pixy.h        ****       g_blockType = CC_BLOCK;
+ 245:pixy.h        ****       return blockCount;
+ 246:pixy.h        ****     }
+ 247:pixy.h        ****     else if (checksum==0)
+ 248:pixy.h        ****       return blockCount;
+ 249:pixy.h        **** 
+ 250:pixy.h        ****     block = g_blocks + blockCount;
+ 251:pixy.h        **** 
+ 252:pixy.h        ****     for (i=0, sum=0; i<sizeof(Block)/sizeof(uint16_t); i++)
+ 253:pixy.h        ****     {
+ 254:pixy.h        ****       if (g_blockType==NORMAL_BLOCK && i>=5) // no angle for normal block
+ 255:pixy.h        ****       {
+ 256:pixy.h        ****         block->angle = 0;
+ 257:pixy.h        ****         break;
+ 258:pixy.h        ****       }
+ 259:pixy.h        ****       w = getWord();
+ 260:pixy.h        ****       sum += w;
+ 261:pixy.h        ****       *((uint16_t *)block + i) = w;
+ 262:pixy.h        ****     }
+ 263:pixy.h        **** 
+ 264:pixy.h        ****     // check checksum
+ 265:pixy.h        ****     if (checksum==sum)
+ 266:pixy.h        ****       blockCount++;
+ 267:pixy.h        ****     else
+ 268:pixy.h        ****       //Serial.print("checksum error!\n");
+ 269:pixy.h        **** 
+ 270:pixy.h        ****     w = getWord();
+ 271:pixy.h        ****     if (w==PIXY_START_WORD)
+ 272:pixy.h        ****       g_blockType = NORMAL_BLOCK;
+ 273:pixy.h        ****     else if (w==PIXY_START_WORD_CC)
+ 274:pixy.h        ****       g_blockType = CC_BLOCK;
+ 275:pixy.h        ****     else
+ 276:pixy.h        ****       return blockCount;
+ 277:pixy.h        ****   }
+ 278:pixy.h        **** 
+ 279:pixy.h        ****   return 0;
+ 280:pixy.h        **** }
+ 1029               		.loc 1 280 0
+ 1030 03d2 CE01      		movw r24,r28
+ 1031               	/* epilogue start */
+ 1032 03d4 DF91      		pop r29
+ 1033 03d6 CF91      		pop r28
+ 1034 03d8 1F91      		pop r17
+ 1035 03da 0F91      		pop r16
+ 1036 03dc FF90      		pop r15
+ 1037 03de EF90      		pop r14
+ 1038 03e0 DF90      		pop r13
+ 1039 03e2 CF90      		pop r12
+ 1040 03e4 BF90      		pop r11
+ 1041 03e6 AF90      		pop r10
+ 1042 03e8 9F90      		pop r9
+ 1043 03ea 8F90      		pop r8
+ 1044 03ec 7F90      		pop r7
+ 1045 03ee 6F90      		pop r6
+ 1046               	.LVL77:
+ 1047 03f0 5F90      		pop r5
+ 1048 03f2 4F90      		pop r4
+ 1049 03f4 3F90      		pop r3
+ 1050 03f6 0895      		ret
+ 1051               	.LVL78:
+ 1052               	.L51:
+ 230:pixy.h        **** 
+ 1053               		.loc 1 230 0
+ 1054 03f8 1092 0000 		sts g_skipStart+1,__zero_reg__
+ 1055 03fc 1092 0000 		sts g_skipStart,__zero_reg__
+ 1056               	.L52:
+ 252:pixy.h        ****     {
+ 1057               		.loc 1 252 0 discriminator 1
+ 1058 0400 D0E0      		ldi r29,0
+ 1059 0402 C0E0      		ldi r28,0
+ 250:pixy.h        **** 
+ 1060               		.loc 1 250 0 discriminator 1
+ 1061 0404 8CE0      		ldi r24,lo8(12)
+ 1062 0406 482E      		mov r4,r24
+ 274:pixy.h        ****     else
+ 1063               		.loc 1 274 0 discriminator 1
+ 1064 0408 3324      		clr r3
+ 1065 040a 3394      		inc r3
+ 1066               	.L54:
+ 1067               	.LVL79:
+ 232:pixy.h        ****   {
+ 1068               		.loc 1 232 0 discriminator 1
+ 1069 040c C615      		cp r28,r6
+ 1070 040e D705      		cpc r29,r7
+ 1071 0410 00F4      		brsh .L64
+ 232:pixy.h        ****   {
+ 1072               		.loc 1 232 0 is_stmt 0 discriminator 2
+ 1073 0412 C436      		cpi r28,100
+ 1074 0414 D105      		cpc r29,__zero_reg__
+ 1075 0416 00F4      		brsh .L64
+ 234:pixy.h        ****     if (checksum==PIXY_START_WORD) // we've reached the beginning of the next frame
+ 1076               		.loc 1 234 0 is_stmt 1
+ 1077 0418 0E94 0000 		call getWord
+ 1078               	.LVL80:
+ 1079 041c 7C01      		movw r14,r24
+ 1080               	.LVL81:
+ 235:pixy.h        ****     {
+ 1081               		.loc 1 235 0
+ 1082 041e 85E5      		ldi r24,85
+ 1083 0420 E816      		cp r14,r24
+ 1084 0422 8AEA      		ldi r24,-86
+ 1085 0424 F806      		cpc r15,r24
+ 1086 0426 01F4      		brne .L55
+ 237:pixy.h        ****       g_blockType = NORMAL_BLOCK;
+ 1087               		.loc 1 237 0
+ 1088 0428 81E0      		ldi r24,lo8(1)
+ 1089 042a 90E0      		ldi r25,0
+ 1090 042c 9093 0000 		sts g_skipStart+1,r25
+ 1091 0430 8093 0000 		sts g_skipStart,r24
+ 238:pixy.h        ****       return blockCount;
+ 1092               		.loc 1 238 0
+ 1093 0434 1092 0000 		sts g_blockType,__zero_reg__
+ 239:pixy.h        ****     }
+ 1094               		.loc 1 239 0
+ 1095 0438 00C0      		rjmp .L50
+ 1096               	.L55:
+ 241:pixy.h        ****     {
+ 1097               		.loc 1 241 0
+ 1098 043a E6E5      		ldi r30,86
+ 1099 043c EE16      		cp r14,r30
+ 1100 043e EAEA      		ldi r30,-86
+ 1101 0440 FE06      		cpc r15,r30
+ 1102 0442 01F4      		brne .L56
+ 243:pixy.h        ****       g_blockType = CC_BLOCK;
+ 1103               		.loc 1 243 0
+ 1104 0444 81E0      		ldi r24,lo8(1)
+ 1105 0446 90E0      		ldi r25,0
+ 1106 0448 9093 0000 		sts g_skipStart+1,r25
+ 1107 044c 8093 0000 		sts g_skipStart,r24
+ 244:pixy.h        ****       return blockCount;
+ 1108               		.loc 1 244 0
+ 1109 0450 8093 0000 		sts g_blockType,r24
+ 245:pixy.h        ****     }
+ 1110               		.loc 1 245 0
+ 1111 0454 00C0      		rjmp .L50
+ 1112               	.L56:
+ 247:pixy.h        ****       return blockCount;
+ 1113               		.loc 1 247 0
+ 1114 0456 E114      		cp r14,__zero_reg__
+ 1115 0458 F104      		cpc r15,__zero_reg__
+ 1116 045a 01F4      		brne .+2
+ 1117 045c 00C0      		rjmp .L50
+ 250:pixy.h        **** 
+ 1118               		.loc 1 250 0
+ 1119 045e 4C9E      		mul r4,r28
+ 1120 0460 6001      		movw r12,r0
+ 1121 0462 4D9E      		mul r4,r29
+ 1122 0464 D00C      		add r13,r0
+ 1123 0466 1124      		clr __zero_reg__
+ 1124 0468 8091 0000 		lds r24,g_blocks
+ 1125 046c 9091 0000 		lds r25,g_blocks+1
+ 1126 0470 C80E      		add r12,r24
+ 1127 0472 D91E      		adc r13,r25
+ 1128               	.LVL82:
+ 1129 0474 4601      		movw r8,r12
+ 252:pixy.h        ****     {
+ 1130               		.loc 1 252 0
+ 1131 0476 B12C      		mov r11,__zero_reg__
+ 1132 0478 A12C      		mov r10,__zero_reg__
+ 1133 047a 512C      		mov r5,__zero_reg__
+ 1134               	.LVL83:
+ 1135               	.L59:
+ 254:pixy.h        ****       {
+ 1136               		.loc 1 254 0
+ 1137 047c 8091 0000 		lds r24,g_blockType
+ 1138 0480 8111      		cpse r24,__zero_reg__
+ 1139 0482 00C0      		rjmp .L57
+ 254:pixy.h        ****       {
+ 1140               		.loc 1 254 0 is_stmt 0 discriminator 1
+ 1141 0484 F5E0      		ldi r31,lo8(5)
+ 1142 0486 5F12      		cpse r5,r31
+ 1143 0488 00C0      		rjmp .L57
+ 256:pixy.h        ****         break;
+ 1144               		.loc 1 256 0 is_stmt 1
+ 1145 048a F601      		movw r30,r12
+ 1146 048c 1386      		std Z+11,__zero_reg__
+ 1147 048e 1286      		std Z+10,__zero_reg__
+ 1148               	.L58:
+ 265:pixy.h        ****       blockCount++;
+ 1149               		.loc 1 265 0
+ 1150 0490 EA14      		cp r14,r10
+ 1151 0492 FB04      		cpc r15,r11
+ 1152 0494 01F4      		brne .L60
+ 266:pixy.h        ****     else
+ 1153               		.loc 1 266 0
+ 1154 0496 2196      		adiw r28,1
+ 1155               	.LVL84:
+ 1156               	.L61:
+ 271:pixy.h        ****       g_blockType = NORMAL_BLOCK;
+ 1157               		.loc 1 271 0
+ 1158 0498 0535      		cpi r16,85
+ 1159 049a 8AEA      		ldi r24,-86
+ 1160 049c 1807      		cpc r17,r24
+ 1161 049e 01F4      		brne .L62
+ 272:pixy.h        ****     else if (w==PIXY_START_WORD_CC)
+ 1162               		.loc 1 272 0
+ 1163 04a0 1092 0000 		sts g_blockType,__zero_reg__
+ 1164 04a4 00C0      		rjmp .L54
+ 1165               	.L57:
+ 259:pixy.h        ****       sum += w;
+ 1166               		.loc 1 259 0 discriminator 2
+ 1167 04a6 0E94 0000 		call getWord
+ 1168               	.LVL85:
+ 1169 04aa 8C01      		movw r16,r24
+ 1170               	.LVL86:
+ 260:pixy.h        ****       *((uint16_t *)block + i) = w;
+ 1171               		.loc 1 260 0 discriminator 2
+ 1172 04ac A80E      		add r10,r24
+ 1173 04ae B91E      		adc r11,r25
+ 1174               	.LVL87:
+ 261:pixy.h        ****     }
+ 1175               		.loc 1 261 0 discriminator 2
+ 1176 04b0 F401      		movw r30,r8
+ 1177 04b2 8193      		st Z+,r24
+ 1178 04b4 9193      		st Z+,r25
+ 1179 04b6 4F01      		movw r8,r30
+ 252:pixy.h        ****     {
+ 1180               		.loc 1 252 0 discriminator 2
+ 1181 04b8 5394      		inc r5
+ 1182               	.LVL88:
+ 1183 04ba F6E0      		ldi r31,lo8(6)
+ 1184 04bc 5F12      		cpse r5,r31
+ 1185 04be 00C0      		rjmp .L59
+ 1186 04c0 00C0      		rjmp .L58
+ 1187               	.L60:
+ 270:pixy.h        ****     if (w==PIXY_START_WORD)
+ 1188               		.loc 1 270 0
+ 1189 04c2 0E94 0000 		call getWord
+ 1190               	.LVL89:
+ 1191 04c6 8C01      		movw r16,r24
+ 1192               	.LVL90:
+ 1193 04c8 00C0      		rjmp .L61
+ 1194               	.L62:
+ 273:pixy.h        ****       g_blockType = CC_BLOCK;
+ 1195               		.loc 1 273 0
+ 1196 04ca 0635      		cpi r16,86
+ 1197 04cc EAEA      		ldi r30,-86
+ 1198 04ce 1E07      		cpc r17,r30
+ 1199 04d0 01F0      		breq .+2
+ 1200 04d2 00C0      		rjmp .L50
+ 274:pixy.h        ****     else
+ 1201               		.loc 1 274 0
+ 1202 04d4 3092 0000 		sts g_blockType,r3
+ 1203 04d8 00C0      		rjmp .L54
+ 1204               		.cfi_endproc
+ 1205               	.LFE24:
+ 1207               	.global	setServos
+ 1209               	setServos:
+ 1210               	.LFB25:
+ 281:pixy.h        **** 
+ 282:pixy.h        **** int setServos(uint16_t s0, uint16_t s1)
+ 283:pixy.h        **** {
+ 1211               		.loc 1 283 0
+ 1212               		.cfi_startproc
+ 1213               	.LVL91:
+ 1214 04da CF93      		push r28
+ 1215               	.LCFI50:
+ 1216               		.cfi_def_cfa_offset 3
+ 1217               		.cfi_offset 28, -2
+ 1218 04dc DF93      		push r29
+ 1219               	.LCFI51:
+ 1220               		.cfi_def_cfa_offset 4
+ 1221               		.cfi_offset 29, -3
+ 1222 04de 00D0      		rcall .
+ 1223 04e0 00D0      		rcall .
+ 1224 04e2 00D0      		rcall .
+ 1225               	.LCFI52:
+ 1226               		.cfi_def_cfa_offset 10
+ 1227 04e4 CDB7      		in r28,__SP_L__
+ 1228 04e6 DEB7      		in r29,__SP_H__
+ 1229               	.LCFI53:
+ 1230               		.cfi_def_cfa_register 28
+ 1231               	/* prologue: function */
+ 1232               	/* frame size = 6 */
+ 1233               	/* stack size = 8 */
+ 1234               	.L__stack_usage = 8
+ 284:pixy.h        ****   uint8_t outBuf[6];
+ 285:pixy.h        **** 
+ 286:pixy.h        ****   outBuf[0] = 0x00;
+ 1235               		.loc 1 286 0
+ 1236 04e8 1982      		std Y+1,__zero_reg__
+ 287:pixy.h        ****   outBuf[1] = PIXY_SERVO_SYNC; 
+ 1237               		.loc 1 287 0
+ 1238 04ea 2FEF      		ldi r18,lo8(-1)
+ 1239 04ec 2A83      		std Y+2,r18
+ 288:pixy.h        ****   *(uint16_t *)(outBuf + 2) = s0;
+ 1240               		.loc 1 288 0
+ 1241 04ee 9C83      		std Y+4,r25
+ 1242 04f0 8B83      		std Y+3,r24
+ 289:pixy.h        ****   *(uint16_t *)(outBuf + 4) = s1;
+ 1243               		.loc 1 289 0
+ 1244 04f2 7E83      		std Y+6,r23
+ 1245 04f4 6D83      		std Y+5,r22
+ 290:pixy.h        **** 
+ 291:pixy.h        ****   return send(outBuf, 6);
+ 1246               		.loc 1 291 0
+ 1247 04f6 66E0      		ldi r22,lo8(6)
+ 1248 04f8 70E0      		ldi r23,0
+ 1249               	.LVL92:
+ 1250 04fa CE01      		movw r24,r28
+ 1251               	.LVL93:
+ 1252 04fc 0196      		adiw r24,1
+ 1253 04fe 0E94 0000 		call send.constprop.1
+ 1254               	.LVL94:
+ 1255               	/* epilogue start */
+ 292:pixy.h        **** }
+ 1256               		.loc 1 292 0
+ 1257 0502 2696      		adiw r28,6
+ 1258 0504 0FB6      		in __tmp_reg__,__SREG__
+ 1259 0506 F894      		cli
+ 1260 0508 DEBF      		out __SP_H__,r29
+ 1261 050a 0FBE      		out __SREG__,__tmp_reg__
+ 1262 050c CDBF      		out __SP_L__,r28
+ 1263 050e DF91      		pop r29
+ 1264 0510 CF91      		pop r28
+ 1265 0512 0895      		ret
+ 1266               		.cfi_endproc
+ 1267               	.LFE25:
+ 1269               	.global	setBrightness
+ 1271               	setBrightness:
+ 1272               	.LFB26:
+ 293:pixy.h        **** 
+ 294:pixy.h        **** int setBrightness(uint8_t brightness)
+ 295:pixy.h        **** {
+ 1273               		.loc 1 295 0
+ 1274               		.cfi_startproc
+ 1275               	.LVL95:
+ 1276 0514 CF93      		push r28
+ 1277               	.LCFI54:
+ 1278               		.cfi_def_cfa_offset 3
+ 1279               		.cfi_offset 28, -2
+ 1280 0516 DF93      		push r29
+ 1281               	.LCFI55:
+ 1282               		.cfi_def_cfa_offset 4
+ 1283               		.cfi_offset 29, -3
+ 1284 0518 00D0      		rcall .
+ 1285 051a 1F92      		push __zero_reg__
+ 1286               	.LCFI56:
+ 1287               		.cfi_def_cfa_offset 7
+ 1288 051c CDB7      		in r28,__SP_L__
+ 1289 051e DEB7      		in r29,__SP_H__
+ 1290               	.LCFI57:
+ 1291               		.cfi_def_cfa_register 28
+ 1292               	/* prologue: function */
+ 1293               	/* frame size = 3 */
+ 1294               	/* stack size = 5 */
+ 1295               	.L__stack_usage = 5
+ 296:pixy.h        ****   uint8_t outBuf[3];
+ 297:pixy.h        **** 
+ 298:pixy.h        ****   outBuf[0] = 0x00;
+ 1296               		.loc 1 298 0
+ 1297 0520 1982      		std Y+1,__zero_reg__
+ 299:pixy.h        ****   outBuf[1] = PIXY_CAM_BRIGHTNESS_SYNC; 
+ 1298               		.loc 1 299 0
+ 1299 0522 9EEF      		ldi r25,lo8(-2)
+ 1300 0524 9A83      		std Y+2,r25
+ 300:pixy.h        ****   outBuf[2] = brightness;
+ 1301               		.loc 1 300 0
+ 1302 0526 8B83      		std Y+3,r24
+ 301:pixy.h        **** 
+ 302:pixy.h        ****   return send(outBuf, 3);
+ 1303               		.loc 1 302 0
+ 1304 0528 63E0      		ldi r22,lo8(3)
+ 1305 052a 70E0      		ldi r23,0
+ 1306 052c CE01      		movw r24,r28
+ 1307               	.LVL96:
+ 1308 052e 0196      		adiw r24,1
+ 1309 0530 0E94 0000 		call send.constprop.1
+ 1310               	.LVL97:
+ 1311               	/* epilogue start */
+ 303:pixy.h        **** }
+ 1312               		.loc 1 303 0
+ 1313 0534 0F90      		pop __tmp_reg__
+ 1314 0536 0F90      		pop __tmp_reg__
+ 1315 0538 0F90      		pop __tmp_reg__
+ 1316 053a DF91      		pop r29
+ 1317 053c CF91      		pop r28
+ 1318 053e 0895      		ret
+ 1319               		.cfi_endproc
+ 1320               	.LFE26:
+ 1322               	.global	setLED
+ 1324               	setLED:
+ 1325               	.LFB27:
+ 304:pixy.h        **** 
+ 305:pixy.h        **** int setLED(uint8_t r, uint8_t g, uint8_t b)
+ 306:pixy.h        **** {
+ 1326               		.loc 1 306 0
+ 1327               		.cfi_startproc
+ 1328               	.LVL98:
+ 1329 0540 CF93      		push r28
+ 1330               	.LCFI58:
+ 1331               		.cfi_def_cfa_offset 3
+ 1332               		.cfi_offset 28, -2
+ 1333 0542 DF93      		push r29
+ 1334               	.LCFI59:
+ 1335               		.cfi_def_cfa_offset 4
+ 1336               		.cfi_offset 29, -3
+ 1337 0544 00D0      		rcall .
+ 1338 0546 00D0      		rcall .
+ 1339 0548 1F92      		push __zero_reg__
+ 1340               	.LCFI60:
+ 1341               		.cfi_def_cfa_offset 9
+ 1342 054a CDB7      		in r28,__SP_L__
+ 1343 054c DEB7      		in r29,__SP_H__
+ 1344               	.LCFI61:
+ 1345               		.cfi_def_cfa_register 28
+ 1346               	/* prologue: function */
+ 1347               	/* frame size = 5 */
+ 1348               	/* stack size = 7 */
+ 1349               	.L__stack_usage = 7
+ 307:pixy.h        ****   uint8_t outBuf[5];
+ 308:pixy.h        **** 
+ 309:pixy.h        ****   outBuf[0] = 0x00;
+ 1350               		.loc 1 309 0
+ 1351 054e 1982      		std Y+1,__zero_reg__
+ 310:pixy.h        ****   outBuf[1] = PIXY_LED_SYNC; 
+ 1352               		.loc 1 310 0
+ 1353 0550 9DEF      		ldi r25,lo8(-3)
+ 1354 0552 9A83      		std Y+2,r25
+ 311:pixy.h        ****   outBuf[2] = r;
+ 1355               		.loc 1 311 0
+ 1356 0554 8B83      		std Y+3,r24
+ 312:pixy.h        ****   outBuf[3] = g;
+ 1357               		.loc 1 312 0
+ 1358 0556 6C83      		std Y+4,r22
+ 313:pixy.h        ****   outBuf[4] = b;
+ 1359               		.loc 1 313 0
+ 1360 0558 4D83      		std Y+5,r20
+ 314:pixy.h        **** 
+ 315:pixy.h        ****   return send(outBuf, 5);
+ 1361               		.loc 1 315 0
+ 1362 055a 65E0      		ldi r22,lo8(5)
+ 1363 055c 70E0      		ldi r23,0
+ 1364               	.LVL99:
+ 1365 055e CE01      		movw r24,r28
+ 1366               	.LVL100:
+ 1367 0560 0196      		adiw r24,1
+ 1368 0562 0E94 0000 		call send.constprop.1
+ 1369               	.LVL101:
+ 1370               	/* epilogue start */
+ 316:pixy.h        **** }
+ 1371               		.loc 1 316 0
+ 1372 0566 0F90      		pop __tmp_reg__
+ 1373 0568 0F90      		pop __tmp_reg__
+ 1374 056a 0F90      		pop __tmp_reg__
+ 1375 056c 0F90      		pop __tmp_reg__
+ 1376 056e 0F90      		pop __tmp_reg__
+ 1377 0570 DF91      		pop r29
+ 1378 0572 CF91      		pop r28
+ 1379 0574 0895      		ret
+ 1380               		.cfi_endproc
+ 1381               	.LFE27:
+ 1383               	.global	updateServos
+ 1385               	updateServos:
+ 1386               	.LFB29:
+ 1387               		.file 4 "main.c"
+   1:main.c        **** #include <avr/io.h>
+   2:main.c        **** #include <util/delay.h>
+   3:main.c        **** #include "usart.h"
+   4:main.c        **** #include "spi.h"
+   5:main.c        **** #include "pixy.h"
+   6:main.c        **** 
+   7:main.c        **** int32_t servoX = 500L, servoY = 500L;
+   8:main.c        **** void updateServos(uint16_t x, uint16_t y);
+   9:main.c        **** 
+  10:main.c        **** int32_t x_p_gain = 350;
+  11:main.c        **** int32_t x_d_gain = 600;
+  12:main.c        **** int32_t y_p_gain = 500;
+  13:main.c        **** int32_t y_d_gain = 700;
+  14:main.c        **** int32_t x_prev_err = 0x80000000L;
+  15:main.c        **** int32_t y_prev_err = 0x80000000L;
+  16:main.c        **** 
+  17:main.c        **** int main(void){
+  18:main.c        **** 
+  19:main.c        ****   usartInit();
+  20:main.c        ****   spiInit();
+  21:main.c        ****   pixyInit();
+  22:main.c        **** 
+  23:main.c        ****   setServos(servoX, servoY);
+  24:main.c        **** 
+  25:main.c        ****   while(1){
+  26:main.c        ****     static int i = 0;
+  27:main.c        ****     int j;
+  28:main.c        ****     uint16_t blocks;
+  29:main.c        ****     char buf[32]; 
+  30:main.c        ****     
+  31:main.c        ****     // grab blocks!
+  32:main.c        ****     blocks = getBlocks(1000);
+  33:main.c        ****     
+  34:main.c        ****     // If there are detect blocks, print them!
+  35:main.c        ****     if (blocks)
+  36:main.c        ****     {
+  37:main.c        **** 
+  38:main.c        ****       updateServos(g_blocks[0].x, g_blocks[0].y);
+  39:main.c        **** 
+  40:main.c        ****       i++;
+  41:main.c        ****       
+  42:main.c        ****       // print after every 50 frames
+  43:main.c        ****       if (i%50==0)
+  44:main.c        ****       {
+  45:main.c        ****         sprintf(buf, "Detected %d:\n", blocks);
+  46:main.c        ****         serialPrint(buf);
+  47:main.c        ****         for (j=0; j<blocks; j++)
+  48:main.c        ****         {
+  49:main.c        ****           sprintf(buf, "  block %d: ", j);
+  50:main.c        ****           serialPrint(buf);
+  51:main.c        ****           print(g_blocks[j]);
+  52:main.c        ****         }
+  53:main.c        ****       }
+  54:main.c        ****     } 
+  55:main.c        ****   }
+  56:main.c        **** 
+  57:main.c        ****   return 0;
+  58:main.c        **** }
+  59:main.c        **** 
+  60:main.c        **** void updateServos(uint16_t x, uint16_t y){
+ 1388               		.loc 4 60 0
+ 1389               		.cfi_startproc
+ 1390               	.LVL102:
+ 1391 0576 4F92      		push r4
+ 1392               	.LCFI62:
+ 1393               		.cfi_def_cfa_offset 3
+ 1394               		.cfi_offset 4, -2
+ 1395 0578 5F92      		push r5
+ 1396               	.LCFI63:
+ 1397               		.cfi_def_cfa_offset 4
+ 1398               		.cfi_offset 5, -3
+ 1399 057a 6F92      		push r6
+ 1400               	.LCFI64:
+ 1401               		.cfi_def_cfa_offset 5
+ 1402               		.cfi_offset 6, -4
+ 1403 057c 7F92      		push r7
+ 1404               	.LCFI65:
+ 1405               		.cfi_def_cfa_offset 6
+ 1406               		.cfi_offset 7, -5
+ 1407 057e 8F92      		push r8
+ 1408               	.LCFI66:
+ 1409               		.cfi_def_cfa_offset 7
+ 1410               		.cfi_offset 8, -6
+ 1411 0580 9F92      		push r9
+ 1412               	.LCFI67:
+ 1413               		.cfi_def_cfa_offset 8
+ 1414               		.cfi_offset 9, -7
+ 1415 0582 AF92      		push r10
+ 1416               	.LCFI68:
+ 1417               		.cfi_def_cfa_offset 9
+ 1418               		.cfi_offset 10, -8
+ 1419 0584 BF92      		push r11
+ 1420               	.LCFI69:
+ 1421               		.cfi_def_cfa_offset 10
+ 1422               		.cfi_offset 11, -9
+ 1423 0586 CF92      		push r12
+ 1424               	.LCFI70:
+ 1425               		.cfi_def_cfa_offset 11
+ 1426               		.cfi_offset 12, -10
+ 1427 0588 DF92      		push r13
+ 1428               	.LCFI71:
+ 1429               		.cfi_def_cfa_offset 12
+ 1430               		.cfi_offset 13, -11
+ 1431 058a EF92      		push r14
+ 1432               	.LCFI72:
+ 1433               		.cfi_def_cfa_offset 13
+ 1434               		.cfi_offset 14, -12
+ 1435 058c FF92      		push r15
+ 1436               	.LCFI73:
+ 1437               		.cfi_def_cfa_offset 14
+ 1438               		.cfi_offset 15, -13
+ 1439               	/* prologue: function */
+ 1440               	/* frame size = 0 */
+ 1441               	/* stack size = 12 */
+ 1442               	.L__stack_usage = 12
+ 1443 058e 4B01      		movw r8,r22
+  61:main.c        ****   //char buf[33];
+  62:main.c        **** 
+  63:main.c        ****   //Servo controlling using Propotional & Derivative Control (PD Control)
+  64:main.c        **** 
+  65:main.c        ****   //Pan Axis (X)
+  66:main.c        ****   int32_t x_error = PIXY_CAM_CENTER_X - x;
+ 1444               		.loc 4 66 0
+ 1445 0590 4FE9      		ldi r20,lo8(-97)
+ 1446 0592 442E      		mov r4,r20
+ 1447 0594 512C      		mov r5,__zero_reg__
+ 1448 0596 612C      		mov r6,__zero_reg__
+ 1449 0598 712C      		mov r7,__zero_reg__
+ 1450 059a 481A      		sub r4,r24
+ 1451 059c 590A      		sbc r5,r25
+ 1452 059e 6108      		sbc r6,__zero_reg__
+ 1453 05a0 7108      		sbc r7,__zero_reg__
+ 1454               	.LVL103:
+  67:main.c        ****   long int x_vel;
+  68:main.c        ****   
+  69:main.c        **** 
+  70:main.c        ****   if (x_prev_err != 0x80000000)
+ 1455               		.loc 4 70 0
+ 1456 05a2 8091 0000 		lds r24,x_prev_err
+ 1457 05a6 9091 0000 		lds r25,x_prev_err+1
+ 1458 05aa A091 0000 		lds r26,x_prev_err+2
+ 1459 05ae B091 0000 		lds r27,x_prev_err+3
+ 1460               	.LVL104:
+ 1461 05b2 0097      		sbiw r24,0
+ 1462 05b4 A105      		cpc r26,__zero_reg__
+ 1463 05b6 20E8      		ldi r18,-128
+ 1464 05b8 B207      		cpc r27,r18
+ 1465 05ba 01F4      		brne .+2
+ 1466 05bc 00C0      		rjmp .L75
+ 1467               	.LVL105:
+  71:main.c        ****   { 
+  72:main.c        ****     x_vel = (x_error*x_p_gain + (x_error - x_prev_err)*x_d_gain)>>10;
+ 1468               		.loc 4 72 0
+ 1469 05be A301      		movw r20,r6
+ 1470 05c0 9201      		movw r18,r4
+ 1471 05c2 281B      		sub r18,r24
+ 1472 05c4 390B      		sbc r19,r25
+ 1473 05c6 4A0B      		sbc r20,r26
+ 1474 05c8 5B0B      		sbc r21,r27
+ 1475 05ca 6091 0000 		lds r22,x_d_gain
+ 1476 05ce 7091 0000 		lds r23,x_d_gain+1
+ 1477 05d2 8091 0000 		lds r24,x_d_gain+2
+ 1478 05d6 9091 0000 		lds r25,x_d_gain+3
+ 1479               	.LVL106:
+ 1480 05da 0E94 0000 		call __mulsi3
+ 1481 05de 6B01      		movw r12,r22
+ 1482 05e0 7C01      		movw r14,r24
+ 1483 05e2 6091 0000 		lds r22,x_p_gain
+ 1484 05e6 7091 0000 		lds r23,x_p_gain+1
+ 1485 05ea 8091 0000 		lds r24,x_p_gain+2
+ 1486 05ee 9091 0000 		lds r25,x_p_gain+3
+ 1487 05f2 A301      		movw r20,r6
+ 1488 05f4 9201      		movw r18,r4
+ 1489 05f6 0E94 0000 		call __mulsi3
+ 1490 05fa DC01      		movw r26,r24
+ 1491 05fc CB01      		movw r24,r22
+ 1492               	.LVL107:
+ 1493 05fe 8C0D      		add r24,r12
+ 1494 0600 9D1D      		adc r25,r13
+ 1495 0602 AE1D      		adc r26,r14
+ 1496 0604 BF1D      		adc r27,r15
+ 1497 0606 3AE0      		ldi r19,10
+ 1498               		1:
+ 1499 0608 B595      		asr r27
+ 1500 060a A795      		ror r26
+ 1501 060c 9795      		ror r25
+ 1502 060e 8795      		ror r24
+ 1503 0610 3A95      		dec r19
+ 1504 0612 01F4      		brne 1b
+  73:main.c        ****     servoX += x_vel;
+ 1505               		.loc 4 73 0
+ 1506 0614 4091 0000 		lds r20,servoX
+ 1507 0618 5091 0000 		lds r21,servoX+1
+ 1508 061c 6091 0000 		lds r22,servoX+2
+ 1509 0620 7091 0000 		lds r23,servoX+3
+ 1510 0624 840F      		add r24,r20
+ 1511 0626 951F      		adc r25,r21
+ 1512 0628 A61F      		adc r26,r22
+ 1513 062a B71F      		adc r27,r23
+  74:main.c        ****     if (servoX > PIXY_SERVO_MAX_POS) 
+ 1514               		.loc 4 74 0
+ 1515 062c 893E      		cpi r24,-23
+ 1516 062e 23E0      		ldi r18,3
+ 1517 0630 9207      		cpc r25,r18
+ 1518 0632 A105      		cpc r26,__zero_reg__
+ 1519 0634 B105      		cpc r27,__zero_reg__
+ 1520 0636 04F4      		brge .+2
+ 1521 0638 00C0      		rjmp .L76
+  75:main.c        ****       servoX = PIXY_SERVO_MAX_POS; 
+ 1522               		.loc 4 75 0
+ 1523 063a 88EE      		ldi r24,lo8(-24)
+ 1524 063c 93E0      		ldi r25,lo8(3)
+ 1525 063e A0E0      		ldi r26,0
+ 1526 0640 B0E0      		ldi r27,0
+ 1527               	.L84:
+  73:main.c        ****     servoX += x_vel;
+ 1528               		.loc 4 73 0
+ 1529 0642 8093 0000 		sts servoX,r24
+ 1530 0646 9093 0000 		sts servoX+1,r25
+ 1531 064a A093 0000 		sts servoX+2,r26
+ 1532 064e B093 0000 		sts servoX+3,r27
+ 1533               	.LVL108:
+ 1534               	.L75:
+  76:main.c        ****     else if (servoX < PIXY_SERVO_MIN_POS) 
+  77:main.c        ****       servoX = PIXY_SERVO_MIN_POS;
+  78:main.c        ****   }
+  79:main.c        ****   x_prev_err = x_error;
+ 1535               		.loc 4 79 0
+ 1536 0652 4092 0000 		sts x_prev_err,r4
+ 1537 0656 5092 0000 		sts x_prev_err+1,r5
+ 1538 065a 6092 0000 		sts x_prev_err+2,r6
+ 1539 065e 7092 0000 		sts x_prev_err+3,r7
+  80:main.c        **** 
+  81:main.c        ****   //Tilt Axis (Y)
+  82:main.c        ****   int32_t y_error = y - PIXY_CAM_CENTER_Y;
+ 1540               		.loc 4 82 0
+ 1541 0662 B12C      		mov r11,__zero_reg__
+ 1542 0664 A12C      		mov r10,__zero_reg__
+ 1543 0666 83E6      		ldi r24,99
+ 1544 0668 881A      		sub r8,r24
+ 1545 066a 9108      		sbc r9,__zero_reg__
+ 1546 066c A108      		sbc r10,__zero_reg__
+ 1547 066e B108      		sbc r11,__zero_reg__
+ 1548               	.LVL109:
+  83:main.c        ****   long int y_vel;
+  84:main.c        **** 
+  85:main.c        ****   if (y_prev_err != 0x80000000)
+ 1549               		.loc 4 85 0
+ 1550 0670 8091 0000 		lds r24,y_prev_err
+ 1551 0674 9091 0000 		lds r25,y_prev_err+1
+ 1552 0678 A091 0000 		lds r26,y_prev_err+2
+ 1553 067c B091 0000 		lds r27,y_prev_err+3
+ 1554 0680 0097      		sbiw r24,0
+ 1555 0682 A105      		cpc r26,__zero_reg__
+ 1556 0684 20E8      		ldi r18,-128
+ 1557 0686 B207      		cpc r27,r18
+ 1558 0688 01F4      		brne .+2
+ 1559 068a 00C0      		rjmp .L80
+ 1560               	.LVL110:
+  86:main.c        ****   { 
+  87:main.c        ****     y_vel = (y_error*y_p_gain + (y_error - y_prev_err)*y_d_gain)>>10;
+ 1561               		.loc 4 87 0
+ 1562 068c A501      		movw r20,r10
+ 1563 068e 9401      		movw r18,r8
+ 1564 0690 281B      		sub r18,r24
+ 1565 0692 390B      		sbc r19,r25
+ 1566 0694 4A0B      		sbc r20,r26
+ 1567 0696 5B0B      		sbc r21,r27
+ 1568 0698 6091 0000 		lds r22,y_d_gain
+ 1569 069c 7091 0000 		lds r23,y_d_gain+1
+ 1570 06a0 8091 0000 		lds r24,y_d_gain+2
+ 1571 06a4 9091 0000 		lds r25,y_d_gain+3
+ 1572 06a8 0E94 0000 		call __mulsi3
+ 1573 06ac 6B01      		movw r12,r22
+ 1574 06ae 7C01      		movw r14,r24
+ 1575 06b0 6091 0000 		lds r22,y_p_gain
+ 1576 06b4 7091 0000 		lds r23,y_p_gain+1
+ 1577 06b8 8091 0000 		lds r24,y_p_gain+2
+ 1578 06bc 9091 0000 		lds r25,y_p_gain+3
+ 1579 06c0 A501      		movw r20,r10
+ 1580 06c2 9401      		movw r18,r8
+ 1581 06c4 0E94 0000 		call __mulsi3
+ 1582 06c8 DC01      		movw r26,r24
+ 1583 06ca CB01      		movw r24,r22
+ 1584               	.LVL111:
+ 1585 06cc 8C0D      		add r24,r12
+ 1586 06ce 9D1D      		adc r25,r13
+ 1587 06d0 AE1D      		adc r26,r14
+ 1588 06d2 BF1D      		adc r27,r15
+ 1589 06d4 2AE0      		ldi r18,10
+ 1590               		1:
+ 1591 06d6 B595      		asr r27
+ 1592 06d8 A795      		ror r26
+ 1593 06da 9795      		ror r25
+ 1594 06dc 8795      		ror r24
+ 1595 06de 2A95      		dec r18
+ 1596 06e0 01F4      		brne 1b
+  88:main.c        ****     servoY += y_vel;
+ 1597               		.loc 4 88 0
+ 1598 06e2 4091 0000 		lds r20,servoY
+ 1599 06e6 5091 0000 		lds r21,servoY+1
+ 1600 06ea 6091 0000 		lds r22,servoY+2
+ 1601 06ee 7091 0000 		lds r23,servoY+3
+ 1602 06f2 840F      		add r24,r20
+ 1603 06f4 951F      		adc r25,r21
+ 1604 06f6 A61F      		adc r26,r22
+ 1605 06f8 B71F      		adc r27,r23
+  89:main.c        ****     if (servoY > PIXY_SERVO_MAX_POS) 
+ 1606               		.loc 4 89 0
+ 1607 06fa 893E      		cpi r24,-23
+ 1608 06fc 23E0      		ldi r18,3
+ 1609 06fe 9207      		cpc r25,r18
+ 1610 0700 A105      		cpc r26,__zero_reg__
+ 1611 0702 B105      		cpc r27,__zero_reg__
+ 1612 0704 04F0      		brlt .L81
+  90:main.c        ****       servoY = PIXY_SERVO_MAX_POS; 
+ 1613               		.loc 4 90 0
+ 1614 0706 88EE      		ldi r24,lo8(-24)
+ 1615 0708 93E0      		ldi r25,lo8(3)
+ 1616 070a A0E0      		ldi r26,0
+ 1617 070c B0E0      		ldi r27,0
+ 1618               	.L85:
+  88:main.c        ****     servoY += y_vel;
+ 1619               		.loc 4 88 0
+ 1620 070e 8093 0000 		sts servoY,r24
+ 1621 0712 9093 0000 		sts servoY+1,r25
+ 1622 0716 A093 0000 		sts servoY+2,r26
+ 1623 071a B093 0000 		sts servoY+3,r27
+ 1624               	.LVL112:
+ 1625               	.L80:
+  91:main.c        ****     else if (servoY < PIXY_SERVO_MIN_POS) 
+  92:main.c        ****       servoY = PIXY_SERVO_MIN_POS;
+  93:main.c        ****   }
+  94:main.c        ****   y_prev_err = y_error;
+ 1626               		.loc 4 94 0
+ 1627 071e 8092 0000 		sts y_prev_err,r8
+ 1628 0722 9092 0000 		sts y_prev_err+1,r9
+ 1629 0726 A092 0000 		sts y_prev_err+2,r10
+ 1630 072a B092 0000 		sts y_prev_err+3,r11
+  95:main.c        **** 
+  96:main.c        ****   //sprintf(buf, "%ld %ld\n", servoX, servoY);
+  97:main.c        ****   //serialPrint(buf);
+  98:main.c        **** 
+  99:main.c        ****   setServos(servoX, servoY);
+ 1631               		.loc 4 99 0
+ 1632 072e 6091 0000 		lds r22,servoY
+ 1633 0732 7091 0000 		lds r23,servoY+1
+ 1634 0736 8091 0000 		lds r24,servoX
+ 1635 073a 9091 0000 		lds r25,servoX+1
+ 1636               	/* epilogue start */
+ 100:main.c        **** }...
+ 1637               		.loc 4 100 0
+ 1638 073e FF90      		pop r15
+ 1639 0740 EF90      		pop r14
+ 1640 0742 DF90      		pop r13
+ 1641 0744 CF90      		pop r12
+ 1642 0746 BF90      		pop r11
+ 1643 0748 AF90      		pop r10
+ 1644 074a 9F90      		pop r9
+ 1645 074c 8F90      		pop r8
+ 1646               	.LVL113:
+ 1647 074e 7F90      		pop r7
+ 1648 0750 6F90      		pop r6
+ 1649 0752 5F90      		pop r5
+ 1650 0754 4F90      		pop r4
+ 1651               	.LVL114:
+  99:main.c        ****   setServos(servoX, servoY);
+ 1652               		.loc 4 99 0
+ 1653 0756 0C94 0000 		jmp setServos
+ 1654               	.LVL115:
+ 1655               	.L76:
+  76:main.c        ****     else if (servoX < PIXY_SERVO_MIN_POS) 
+ 1656               		.loc 4 76 0
+ 1657 075a B7FF      		sbrs r27,7
+ 1658 075c 00C0      		rjmp .L84
+  77:main.c        ****       servoX = PIXY_SERVO_MIN_POS;
+ 1659               		.loc 4 77 0
+ 1660 075e 1092 0000 		sts servoX,__zero_reg__
+ 1661 0762 1092 0000 		sts servoX+1,__zero_reg__
+ 1662 0766 1092 0000 		sts servoX+2,__zero_reg__
+ 1663 076a 1092 0000 		sts servoX+3,__zero_reg__
+ 1664 076e 00C0      		rjmp .L75
+ 1665               	.LVL116:
+ 1666               	.L81:
+  91:main.c        ****     else if (servoY < PIXY_SERVO_MIN_POS) 
+ 1667               		.loc 4 91 0
+ 1668 0770 B7FF      		sbrs r27,7
+ 1669 0772 00C0      		rjmp .L85
+  92:main.c        ****       servoY = PIXY_SERVO_MIN_POS;
+ 1670               		.loc 4 92 0
+ 1671 0774 1092 0000 		sts servoY,__zero_reg__
+ 1672 0778 1092 0000 		sts servoY+1,__zero_reg__
+ 1673 077c 1092 0000 		sts servoY+2,__zero_reg__
+ 1674 0780 1092 0000 		sts servoY+3,__zero_reg__
+ 1675 0784 00C0      		rjmp .L80
+ 1676               		.cfi_endproc
+ 1677               	.LFE29:
+ 1679               		.section	.rodata.str1.1
+ 1680               	.LC2:
+ 1681 0074 4465 7465 		.string	"Detected %d:\n"
+ 1681      6374 6564 
+ 1681      2025 643A 
+ 1681      0A00 
+ 1682               	.LC3:
+ 1683 0082 2020 626C 		.string	"  block %d: "
+ 1683      6F63 6B20 
+ 1683      2564 3A20 
+ 1683      00
+ 1684               		.section	.text.startup,"ax",@progbits
+ 1685               	.global	main
+ 1687               	main:
+ 1688               	.LFB28:
+  17:main.c        **** int main(void){
+ 1689               		.loc 4 17 0
+ 1690               		.cfi_startproc
+ 1691 0000 CF93      		push r28
+ 1692               	.LCFI74:
+ 1693               		.cfi_def_cfa_offset 3
+ 1694               		.cfi_offset 28, -2
+ 1695 0002 DF93      		push r29
+ 1696               	.LCFI75:
+ 1697               		.cfi_def_cfa_offset 4
+ 1698               		.cfi_offset 29, -3
+ 1699 0004 CDB7      		in r28,__SP_L__
+ 1700 0006 DEB7      		in r29,__SP_H__
+ 1701               	.LCFI76:
+ 1702               		.cfi_def_cfa_register 28
+ 1703 0008 A097      		sbiw r28,32
+ 1704               	.LCFI77:
+ 1705               		.cfi_def_cfa_offset 36
+ 1706 000a 0FB6      		in __tmp_reg__,__SREG__
+ 1707 000c F894      		cli
+ 1708 000e DEBF      		out __SP_H__,r29
+ 1709 0010 0FBE      		out __SREG__,__tmp_reg__
+ 1710 0012 CDBF      		out __SP_L__,r28
+ 1711               	/* prologue: function */
+ 1712               	/* frame size = 32 */
+ 1713               	/* stack size = 34 */
+ 1714               	.L__stack_usage = 34
+  19:main.c        ****   usartInit();
+ 1715               		.loc 4 19 0
+ 1716 0014 0E94 0000 		call usartInit
+ 1717               	.LVL117:
+  20:main.c        ****   spiInit();
+ 1718               		.loc 4 20 0
+ 1719 0018 0E94 0000 		call spiInit
+ 1720               	.LVL118:
+ 1721               	.LBB25:
+ 1722               	.LBB26:
+  89:pixy.h        **** }
+ 1723               		.loc 1 89 0
+ 1724 001c 0E94 0000 		call init
+ 1725               	.LVL119:
+ 1726               	.LBE26:
+ 1727               	.LBE25:
+  23:main.c        ****   setServos(servoX, servoY);
+ 1728               		.loc 4 23 0
+ 1729 0020 6091 0000 		lds r22,servoY
+ 1730 0024 7091 0000 		lds r23,servoY+1
+ 1731 0028 8091 0000 		lds r24,servoX
+ 1732 002c 9091 0000 		lds r25,servoX+1
+ 1733 0030 0E94 0000 		call setServos
+ 1734               	.LVL120:
+ 1735               	.LBB27:
+  45:main.c        ****         sprintf(buf, "Detected %d:\n", blocks);
+ 1736               		.loc 4 45 0
+ 1737 0034 80E0      		ldi r24,lo8(.LC2)
+ 1738 0036 282E      		mov r2,r24
+ 1739 0038 80E0      		ldi r24,hi8(.LC2)
+ 1740 003a 382E      		mov r3,r24
+ 1741 003c CE01      		movw r24,r28
+ 1742 003e 0196      		adiw r24,1
+ 1743 0040 5C01      		movw r10,r24
+  49:main.c        ****           sprintf(buf, "  block %d: ", j);
+ 1744               		.loc 4 49 0
+ 1745 0042 90E0      		ldi r25,lo8(.LC3)
+ 1746 0044 492E      		mov r4,r25
+ 1747 0046 90E0      		ldi r25,hi8(.LC3)
+ 1748 0048 592E      		mov r5,r25
+ 1749               	.L88:
+  32:main.c        ****     blocks = getBlocks(1000);
+ 1750               		.loc 4 32 0
+ 1751 004a 88EE      		ldi r24,lo8(-24)
+ 1752 004c 93E0      		ldi r25,lo8(3)
+ 1753 004e 0E94 0000 		call getBlocks
+ 1754               	.LVL121:
+ 1755 0052 4C01      		movw r8,r24
+ 1756               	.LVL122:
+  35:main.c        ****     if (blocks)
+ 1757               		.loc 4 35 0
+ 1758 0054 892B      		or r24,r25
+ 1759 0056 01F0      		breq .L88
+  38:main.c        ****       updateServos(g_blocks[0].x, g_blocks[0].y);
+ 1760               		.loc 4 38 0
+ 1761 0058 E091 0000 		lds r30,g_blocks
+ 1762 005c F091 0000 		lds r31,g_blocks+1
+ 1763 0060 6481      		ldd r22,Z+4
+ 1764 0062 7581      		ldd r23,Z+5
+ 1765 0064 8281      		ldd r24,Z+2
+ 1766 0066 9381      		ldd r25,Z+3
+ 1767 0068 0E94 0000 		call updateServos
+ 1768               	.LVL123:
+  40:main.c        ****       i++;
+ 1769               		.loc 4 40 0
+ 1770 006c 8091 0000 		lds r24,i.2286
+ 1771 0070 9091 0000 		lds r25,i.2286+1
+ 1772 0074 0196      		adiw r24,1
+ 1773 0076 9093 0000 		sts i.2286+1,r25
+ 1774 007a 8093 0000 		sts i.2286,r24
+  43:main.c        ****       if (i%50==0)
+ 1775               		.loc 4 43 0
+ 1776 007e 62E3      		ldi r22,lo8(50)
+ 1777 0080 70E0      		ldi r23,0
+ 1778 0082 0E94 0000 		call __divmodhi4
+ 1779 0086 6C01      		movw r12,r24
+ 1780 0088 892B      		or r24,r25
+ 1781 008a 01F4      		brne .L88
+  45:main.c        ****         sprintf(buf, "Detected %d:\n", blocks);
+ 1782               		.loc 4 45 0
+ 1783 008c 9F92      		push r9
+ 1784 008e 8F92      		push r8
+ 1785 0090 3F92      		push r3
+ 1786 0092 2F92      		push r2
+ 1787 0094 BF92      		push r11
+ 1788 0096 AF92      		push r10
+ 1789 0098 0E94 0000 		call sprintf
+ 1790               	.LVL124:
+  46:main.c        ****         serialPrint(buf);
+ 1791               		.loc 4 46 0
+ 1792 009c C501      		movw r24,r10
+ 1793 009e 0E94 0000 		call serialPrint
+ 1794               	.LVL125:
+ 1795 00a2 0F90      		pop __tmp_reg__
+ 1796 00a4 0F90      		pop __tmp_reg__
+ 1797 00a6 0F90      		pop __tmp_reg__
+ 1798 00a8 0F90      		pop __tmp_reg__
+ 1799 00aa 0F90      		pop __tmp_reg__
+ 1800 00ac 0F90      		pop __tmp_reg__
+ 1801 00ae 712C      		mov r7,__zero_reg__
+ 1802 00b0 612C      		mov r6,__zero_reg__
+ 1803               	.LVL126:
+ 1804               	.L90:
+  49:main.c        ****           sprintf(buf, "  block %d: ", j);
+ 1805               		.loc 4 49 0 discriminator 3
+ 1806 00b2 DF92      		push r13
+ 1807 00b4 CF92      		push r12
+ 1808 00b6 5F92      		push r5
+ 1809 00b8 4F92      		push r4
+ 1810 00ba BF92      		push r11
+ 1811 00bc AF92      		push r10
+ 1812 00be 0E94 0000 		call sprintf
+ 1813               	.LVL127:
+  50:main.c        ****           serialPrint(buf);
+ 1814               		.loc 4 50 0 discriminator 3
+ 1815 00c2 C501      		movw r24,r10
+ 1816 00c4 0E94 0000 		call serialPrint
+ 1817               	.LVL128:
+  51:main.c        ****           print(g_blocks[j]);
+ 1818               		.loc 4 51 0 discriminator 3
+ 1819 00c8 E091 0000 		lds r30,g_blocks
+ 1820 00cc F091 0000 		lds r31,g_blocks+1
+ 1821 00d0 E60D      		add r30,r6
+ 1822 00d2 F71D      		adc r31,r7
+ 1823 00d4 E080      		ld r14,Z
+ 1824 00d6 F180      		ldd r15,Z+1
+ 1825 00d8 0281      		ldd r16,Z+2
+ 1826 00da 1381      		ldd r17,Z+3
+ 1827 00dc 2481      		ldd r18,Z+4
+ 1828 00de 3581      		ldd r19,Z+5
+ 1829 00e0 4681      		ldd r20,Z+6
+ 1830 00e2 5781      		ldd r21,Z+7
+ 1831 00e4 6085      		ldd r22,Z+8
+ 1832 00e6 7185      		ldd r23,Z+9
+ 1833 00e8 8285      		ldd r24,Z+10
+ 1834 00ea 9385      		ldd r25,Z+11
+ 1835 00ec 0E94 0000 		call print
+ 1836               	.LVL129:
+  47:main.c        ****         for (j=0; j<blocks; j++)
+ 1837               		.loc 4 47 0 discriminator 3
+ 1838 00f0 9FEF      		ldi r25,-1
+ 1839 00f2 C91A      		sub r12,r25
+ 1840 00f4 D90A      		sbc r13,r25
+ 1841               	.LVL130:
+ 1842 00f6 8CE0      		ldi r24,12
+ 1843 00f8 680E      		add r6,r24
+ 1844 00fa 711C      		adc r7,__zero_reg__
+ 1845 00fc 0F90      		pop __tmp_reg__
+ 1846 00fe 0F90      		pop __tmp_reg__
+ 1847 0100 0F90      		pop __tmp_reg__
+ 1848 0102 0F90      		pop __tmp_reg__
+ 1849 0104 0F90      		pop __tmp_reg__
+ 1850 0106 0F90      		pop __tmp_reg__
+ 1851 0108 C814      		cp r12,r8
+ 1852 010a D904      		cpc r13,r9
+ 1853 010c 01F4      		brne .L90
+ 1854 010e 00C0      		rjmp .L88
+ 1855               	.LBE27:
+ 1856               		.cfi_endproc
+ 1857               	.LFE28:
+ 1859               		.local	i.2286
+ 1860               		.comm	i.2286,2,1
+ 1861               	.global	y_prev_err
+ 1862               		.data
+ 1865               	y_prev_err:
+ 1866 0000 00        		.byte	0
+ 1867 0001 00        		.byte	0
+ 1868 0002 00        		.byte	0
+ 1869 0003 80        		.byte	-128
+ 1870               	.global	x_prev_err
+ 1873               	x_prev_err:
+ 1874 0004 00        		.byte	0
+ 1875 0005 00        		.byte	0
+ 1876 0006 00        		.byte	0
+ 1877 0007 80        		.byte	-128
+ 1878               	.global	y_d_gain
+ 1881               	y_d_gain:
+ 1882 0008 BC        		.byte	-68
+ 1883 0009 02        		.byte	2
+ 1884 000a 00        		.byte	0
+ 1885 000b 00        		.byte	0
+ 1886               	.global	y_p_gain
+ 1889               	y_p_gain:
+ 1890 000c F4        		.byte	-12
+ 1891 000d 01        		.byte	1
+ 1892 000e 00        		.byte	0
+ 1893 000f 00        		.byte	0
+ 1894               	.global	x_d_gain
+ 1897               	x_d_gain:
+ 1898 0010 58        		.byte	88
+ 1899 0011 02        		.byte	2
+ 1900 0012 00        		.byte	0
+ 1901 0013 00        		.byte	0
+ 1902               	.global	x_p_gain
+ 1905               	x_p_gain:
+ 1906 0014 5E        		.byte	94
+ 1907 0015 01        		.byte	1
+ 1908 0016 00        		.byte	0
+ 1909 0017 00        		.byte	0
+ 1910               	.global	servoY
+ 1913               	servoY:
+ 1914 0018 F4        		.byte	-12
+ 1915 0019 01        		.byte	1
+ 1916 001a 00        		.byte	0
+ 1917 001b 00        		.byte	0
+ 1918               	.global	servoX
+ 1921               	servoX:
+ 1922 001c F4        		.byte	-12
+ 1923 001d 01        		.byte	1
+ 1924 001e 00        		.byte	0
+ 1925 001f 00        		.byte	0
+ 1926               		.local	g_blocks
+ 1927               		.comm	g_blocks,2,1
+ 1928               		.local	g_blockType
+ 1929               		.comm	g_blockType,1,1
+ 1930               		.local	g_skipStart
+ 1931               		.comm	g_skipStart,2,1
+ 1932               		.local	g_outReadIndex
+ 1933               		.comm	g_outReadIndex,1,1
+ 1934               		.local	g_outWriteIndex
+ 1935               		.comm	g_outWriteIndex,1,1
+ 1936               		.local	g_outLen
+ 1937               		.comm	g_outLen,1,1
+ 1938               		.local	g_outBuf
+ 1939               		.comm	g_outBuf,64,1
+ 1940               		.text
+ 1941               	.Letext0:
+ 1942               		.file 5 "/usr/avr/include/stdint.h"
+ 1943               		.file 6 "/usr/lib/gcc/avr/7.1.0/include/stddef.h"
+ 1944               		.file 7 "/usr/avr/include/stdio.h"
+ 1945               		.file 8 "/usr/avr/include/stdlib.h"
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 main.c
+     /tmp/cczomCtG.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/cczomCtG.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/cczomCtG.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/cczomCtG.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/cczomCtG.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/cczomCtG.s:11     .text:0000000000000000 send.constprop.1
+     /tmp/cczomCtG.s:1935   .bss:0000000000000009 g_outLen
+     /tmp/cczomCtG.s:1933   .bss:0000000000000008 g_outWriteIndex
+     /tmp/cczomCtG.s:1937   .bss:000000000000000a g_outBuf
+     /tmp/cczomCtG.s:84     .text:000000000000004c usartInit
+     /tmp/cczomCtG.s:118    .text:000000000000006c usartTransmit
+     /tmp/cczomCtG.s:142    .text:000000000000007a serialPrintln
+     /tmp/cczomCtG.s:250    .text:00000000000000de serialPrint
+     /tmp/cczomCtG.s:355    .text:000000000000013e spiInit
+     /tmp/cczomCtG.s:387    .text:0000000000000152 spiTransfer
+     /tmp/cczomCtG.s:413    .text:000000000000015e getWord
+     /tmp/cczomCtG.s:1931   .bss:0000000000000007 g_outReadIndex
+     /tmp/cczomCtG.s:515    .text:00000000000001b8 print
+     /tmp/cczomCtG.s:770    .text:0000000000000314 getByte
+     /tmp/cczomCtG.s:787    .text:0000000000000318 init
+     /tmp/cczomCtG.s:1860   .bss:0000000000000002 g_blocks
+     /tmp/cczomCtG.s:810    .text:000000000000032a pixyInit
+     /tmp/cczomCtG.s:826    .text:000000000000032e getStart
+     /tmp/cczomCtG.s:1927   .bss:0000000000000004 g_blockType
+     /tmp/cczomCtG.s:935    .text:0000000000000396 getBlocks
+     /tmp/cczomCtG.s:1929   .bss:0000000000000005 g_skipStart
+     /tmp/cczomCtG.s:1209   .text:00000000000004da setServos
+     /tmp/cczomCtG.s:1271   .text:0000000000000514 setBrightness
+     /tmp/cczomCtG.s:1324   .text:0000000000000540 setLED
+     /tmp/cczomCtG.s:1385   .text:0000000000000576 updateServos
+     /tmp/cczomCtG.s:1873   .data:0000000000000004 x_prev_err
+     /tmp/cczomCtG.s:1897   .data:0000000000000010 x_d_gain
+     /tmp/cczomCtG.s:1905   .data:0000000000000014 x_p_gain
+     /tmp/cczomCtG.s:1921   .data:000000000000001c servoX
+     /tmp/cczomCtG.s:1865   .data:0000000000000000 y_prev_err
+     /tmp/cczomCtG.s:1881   .data:0000000000000008 y_d_gain
+     /tmp/cczomCtG.s:1889   .data:000000000000000c y_p_gain
+     /tmp/cczomCtG.s:1913   .data:0000000000000018 servoY
+     /tmp/cczomCtG.s:1687   .text.startup:0000000000000000 main
+                             .bss:0000000000000000 i.2286
+
+UNDEFINED SYMBOLS
+sprintf
+malloc
+__mulsi3
+__divmodhi4
+__do_copy_data
+__do_clear_bss
