@@ -30,3 +30,9 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 * PIXY Porting guide
 * Arduino PIXY Library
+
+## Special Thanks
+
+* [Dr. Hiran Jayaweera](http://science.cmb.ac.lk/physics/academic_staff/dr-hiran-h-e-jayaweera/)
+* [Mr. Deshitha Wickramarathna](http://science.cmb.ac.lk/physics/academic_staff/mr-d-d-c-wickramarathna/)
+* Department of Physics at the Faculty of Science, University of Colombo, Sri Lanka.
