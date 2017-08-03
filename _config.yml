@@ -1,7 +1,5 @@
 url: "http://rashintha.github.io"
 
-theme: jekyll-theme-cayman
-
 navbar-links:
   About Me: "aboutme"
   Resources:
@@ -9,3 +7,5 @@ navbar-links:
     - Learn markdown: "http://www.markdowntutorial.com/"
     - GitHub Pages: "https://pages.github.com/"
   Author's home: "http://deanattali.com"
+
+theme: jekyll-theme-cayman
