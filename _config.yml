@@ -2,6 +2,8 @@ name: PIXY AVR Library
 
 description: This is a AVR library for PIXY camera. Currently the library is made for Atmega328P MCU. Change relevent registers when you’re using it for another MCU. USART or SPI communication methods could be used to communicate with the PIXY in this library.
 
+avatar: https://avatars2.githubusercontent.com/u/30569076?v=4&s=460
+
 theme: jekyll-theme-cayman
 
 footer-links:
