@@ -4,8 +4,6 @@
 #include "spi.h"
 #include "pixy.h"
 
-#define F_CPU 16000000UL
-
 int32_t servoX = 500L, servoY = 500L;
 void updateServos(uint16_t x, uint16_t y);
 

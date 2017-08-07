@@ -637,20 +637,20 @@ END GROUP
  .debug_abbrev  0x0000000000000000      0x5a2 /usr/lib/gcc/avr/7.1.0/../../../../avr/lib/avr5/crtatmega328p.o
  .debug_abbrev  0x00000000000005a2      0x386 main.o
 
-.debug_line     0x0000000000000000      0x600
+.debug_line     0x0000000000000000      0x5ff
  *(.debug_line .debug_line.* .debug_line_end)
  .debug_line    0x0000000000000000       0x1d /usr/lib/gcc/avr/7.1.0/../../../../avr/lib/avr5/crtatmega328p.o
- .debug_line    0x000000000000001d      0x5e3 main.o
+ .debug_line    0x000000000000001d      0x5e2 main.o
 
 .debug_frame    0x0000000000000000      0x308
  *(.debug_frame)
  .debug_frame   0x0000000000000000      0x308 main.o
 
-.debug_str      0x0000000000000000      0x587
+.debug_str      0x0000000000000000      0x58c
  *(.debug_str)
  .debug_str     0x0000000000000000      0x208 /usr/lib/gcc/avr/7.1.0/../../../../avr/lib/avr5/crtatmega328p.o
- .debug_str     0x0000000000000208      0x37f main.o
-                                        0x3d3 (size before relaxing)
+ .debug_str     0x0000000000000208      0x384 main.o
+                                        0x3d8 (size before relaxing)
 
 .debug_loc      0x0000000000000000      0xde9
  *(.debug_loc)
