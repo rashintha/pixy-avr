@@ -32,8 +32,7 @@ int main(void){
     blocks = getBlocks(1000);
     
     // If there are detect blocks, print them!
-    if (blocks)
-    {
+    if (blocks){
 
       updateServos(g_blocks[0].x, g_blocks[0].y);
 
